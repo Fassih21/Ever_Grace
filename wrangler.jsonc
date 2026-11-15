@@ -1,0 +1,26 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ever-grace",
+  "compatibility_date": "2026-10-25",
+  "compatibility_flags": ["nodejs_compat"],
+  "main": ".output/server/index.mjs",
+  "no_bundle": true,
+  "assets": {
+    "binding": "ASSETS",
+    "directory": ".output/public"
+  },
+  "rules": [
+    { "type": "ESModule", "globs": ["**/*.mjs", "**/*.js"] }
+  ],
+  "observability": { "enabled": true },
+  "vars": {
+    "SUPABASE_URL": "https://c--584dc68f-29ca-4369-bc84-875b5cde7963-prod.lovable.cloud",
+    "SUPABASE_PUBLISHABLE_KEY": "sb_publishable_rXanYQGbYc9nB076bH52_Q_Azq2aJEo"
+  },
+  "previews": {
+    "vars": {
+      "SUPABASE_URL": "https://c--584dc68f-29ca-4369-bc84-875b5cde7963-prod.lovable.cloud",
+      "SUPABASE_PUBLISHABLE_KEY": "sb_publishable_rXanYQGbYc9nB076bH52_Q_Azq2aJEo"
+    }
+  }
+}
