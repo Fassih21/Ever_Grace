@@ -129,7 +129,7 @@ function Detail() {
                 <div className="font-semibold">{svcName(pl.service_id)}</div>
                 <div className="text-xs text-muted-foreground">{used} of {pl.total_sessions} sessions booked · {money(pl.total_price)} total</div>
               </div>
-              <span className={cn("rounded-full px-2.5 py-0.5 text-[11px] font-semibold capitalize", st[pl.status] ?? st.cancelled)}>{pl.status}</span>
+              <span className={cn("rounded-full px-2.5 py-0.5 text-[11px] font-semibold capitalize", st[pl.status] ?? st["cancelled"])}>{pl.status}</span>
               {pl.status === "active" && (
                 <div className="flex gap-2">
                   <Button size="sm" variant="outline" onClick={() => setPlanStatus.mutate({ id: pl.id, status: "completed" })}>Complete</Button>
