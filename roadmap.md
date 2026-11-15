@@ -1,0 +1,4 @@
+- [ ] Configure private email/password access and create the clinic data schema with role-based safeguards.
+- [ ] Build the sign-in flow, protected clinic navigation, and desktop/mobile layouts.
+- [ ] Implement appointments, patient visits/history, payments, service/slot/user settings, and requested placeholder pages.
+- [ ] Verify the app, database-backed flows, and project diagnostics.
