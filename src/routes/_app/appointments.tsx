@@ -15,6 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { BookForm } from "@/components/book-form";
+import { InvoiceDialog, type InvoiceTarget } from "@/components/invoice-dialog";
 import { ACTIVE, calcMaxDur, useDayAppts, useServices, useSlots } from "@/lib/shared";
 import { addDays, fmtDate, fmtTime, money, todayPK } from "@/lib/format";
 
@@ -30,6 +31,7 @@ function Appointments() {
   const [date, setDate] = useState(today);
   const [sel, setSel] = useState<number | null>(null);
   const [cancelId, setCancelId] = useState<string | null>(null);
+  const [inv, setInv] = useState<InvoiceTarget | null>(null);
   const [reason, setReason] = useState("");
   const slots = useSlots().data ?? [];
   const services = useServices().data ?? [];
@@ -152,8 +154,10 @@ function Appointments() {
                       </div>
                       <div className="text-right text-sm">
                         <div className="font-semibold">{money(a.total_amount!)}</div>
+                        {(a.discount_amount ?? 0) > 0 && <div className="text-xs text-muted-foreground">Discount {money(a.discount_amount!)}</div>}
                         {a.balance ? <div className="whitespace-nowrap text-[#b4443a]">Pending {money(a.balance)}</div> : <div className="text-[#2f7d6b]">Paid in full</div>}
                       </div>
+                      {a.status === "completed" && <Button size="sm" variant="outline" onClick={() => setInv({ patientId: a.patient_id!, date: a.appt_date! })}>Invoice</Button>}
                       {a.status === "booked" && (
                         <div className="flex gap-2">
                           <Button size="sm" variant="outline" onClick={() => setStatus.mutate({ id: a.id!, status: "completed" })}>Mark completed</Button>
@@ -202,6 +206,7 @@ function Appointments() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <InvoiceDialog target={inv} onClose={() => setInv(null)} />
     </div>
   );
 }

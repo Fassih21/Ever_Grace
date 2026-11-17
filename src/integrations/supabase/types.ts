@@ -28,6 +28,7 @@ export type Database = {
           start_slot: number
           status: Database["public"]["Enums"]["appointment_status"]
           total_amount: number
+          discount_amount: number
           updated_at: string
         }
         Insert: {
@@ -43,6 +44,7 @@ export type Database = {
           start_slot: number
           status?: Database["public"]["Enums"]["appointment_status"]
           total_amount: number
+          discount_amount?: number
           updated_at?: string
         }
         Update: {
@@ -58,6 +60,7 @@ export type Database = {
           start_slot?: number
           status?: Database["public"]["Enums"]["appointment_status"]
           total_amount?: number
+          discount_amount?: number
           updated_at?: string
         }
         Relationships: [
@@ -164,6 +167,39 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      invoices: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          invoice_date: string
+          invoice_no: number
+          patient_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          invoice_date: string
+          patient_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          invoice_date?: string
+          patient_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoices_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       patients: {
         Row: {
@@ -531,6 +567,7 @@ export type Database = {
           start_slot: number | null
           status: Database["public"]["Enums"]["appointment_status"] | null
           total_amount: number | null
+          discount_amount: number | null
           updated_at: string | null
         }
         Relationships: [
@@ -569,6 +606,7 @@ export type Database = {
       book_appointment: {
         Args: {
           p_advance_amount?: number
+          p_discount_amount?: number
           p_appt_date: string
           p_name: string
           p_payment_method?: Database["public"]["Enums"]["payment_method"]
@@ -580,6 +618,10 @@ export type Database = {
           p_total_amount: number
         }
         Returns: string
+      }
+      get_or_create_invoice: {
+        Args: { p_date: string; p_patient_id: string }
+        Returns: number
       }
       has_role: {
         Args: {
