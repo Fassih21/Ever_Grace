@@ -110,7 +110,7 @@ function Detail() {
             <div className="w-28 text-sm font-semibold">{fmtDate(a.appt_date!, { day: "numeric", month: "short", year: "numeric" })}</div>
             <div className="min-w-0 flex-1 text-sm">{svcName(a.service_id)}{a.slots_count! > 1 ? ` · ${a.slots_count} slots` : ""}{a.plan_id ? " · plan" : ""}</div>
             <span className={cn("rounded-full px-2.5 py-0.5 text-[11px] font-semibold capitalize", st[a.status!])}>{a.status!.replace("_", " ")}</span>
-            <div className="w-28 text-right text-sm"><b>{money(a.paid_total ?? 0)}</b><div className="text-xs text-muted-foreground">of {money(a.total_amount!)}</div></div>
+            <div className="w-28 text-right text-sm"><b>{money(a.paid_total ?? 0)}</b><div className="text-xs text-muted-foreground">of {money(a.total_amount!)}</div>{(a.discount_amount ?? 0) > 0 && <div className="text-xs text-[#2f7d6b]">Discount {money(a.discount_amount!)}</div>}</div>
             {(a.status === "booked" || a.status === "completed") && (a.balance ?? 0) > 0 ? (
               <Button size="sm" variant="outline" onClick={() => setPay({ id: a.id!, balance: a.balance!, who: p.name })}>Receive {money(a.balance!)}</Button>
             ) : <div className="w-[110px]" />}
