@@ -28,6 +28,7 @@ export type Database = {
           start_slot: number
           status: Database["public"]["Enums"]["appointment_status"]
           total_amount: number
+          discount_amount: number
           updated_at: string
         }
         Insert: {
@@ -43,6 +44,7 @@ export type Database = {
           start_slot: number
           status?: Database["public"]["Enums"]["appointment_status"]
           total_amount: number
+          discount_amount?: number
           updated_at?: string
         }
         Update: {
@@ -58,6 +60,7 @@ export type Database = {
           start_slot?: number
           status?: Database["public"]["Enums"]["appointment_status"]
           total_amount?: number
+          discount_amount?: number
           updated_at?: string
         }
         Relationships: [
@@ -531,6 +534,7 @@ export type Database = {
           start_slot: number | null
           status: Database["public"]["Enums"]["appointment_status"] | null
           total_amount: number | null
+          discount_amount: number | null
           updated_at: string | null
         }
         Relationships: [
@@ -569,6 +573,7 @@ export type Database = {
       book_appointment: {
         Args: {
           p_advance_amount?: number
+          p_discount_amount?: number
           p_appt_date: string
           p_name: string
           p_payment_method?: Database["public"]["Enums"]["payment_method"]

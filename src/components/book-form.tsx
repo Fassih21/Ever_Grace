@@ -22,6 +22,8 @@ export function BookForm(p: {
   const [dur, setDur] = useState(1);
   const [total, setTotal] = useState("");
   const [advance, setAdvance] = useState("");
+  const [disc, setDisc] = useState("");
+  const [discPct, setDiscPct] = useState(false);
   const [method, setMethod] = useState<Method>("cash");
   const [planId, setPlanId] = useState("");
   const ph = normPhone(phone);
@@ -70,14 +72,17 @@ export function BookForm(p: {
     }
   };
   const t = Number(total) || 0;
+  const dRaw = Number(disc) || 0;
+  const d = Math.min(discPct ? Math.round((t * dRaw) / 100) : dRaw, t);
+  const net = t - d;
   const adv = Number(advance) || 0;
-  const valid = !!serviceId && phoneOk && !!shownName.trim() && t > 0 && adv >= 0 && adv <= t;
+  const valid = !!serviceId && phoneOk && !!shownName.trim() && net > 0 && adv >= 0 && adv <= net;
 
   const save = useMutation({
     mutationFn: async () => {
       const { error } = await supabase.rpc("book_appointment", {
         p_phone: ph, p_name: shownName.trim(), p_service_id: serviceId, p_appt_date: p.date,
-        p_start_slot: p.start, p_slots_count: dur, p_total_amount: t, p_advance_amount: adv,
+        p_start_slot: p.start, p_slots_count: dur, p_total_amount: net, p_discount_amount: d, p_advance_amount: adv,
         ...(adv > 0 ? { p_payment_method: method } : {}),
         ...(plan ? { p_plan_id: plan.id } : {}),
       });
@@ -136,10 +141,22 @@ export function BookForm(p: {
       <Input value={shownName} readOnly={!!ex} className={ex ? "bg-muted" : ""} onChange={(e) => setName(e.target.value)} />
 
       <div className="grid grid-cols-2 gap-3">
-        <div><span className={lbl}>Total (Rs)</span><Input inputMode="numeric" value={total} onChange={(e) => setTotal(e.target.value.replace(/\D/g, ""))} /></div>
-        <div><span className={lbl}>{p.walkIn ? "Paid now (Rs)" : "Advance (Rs)"}</span><Input inputMode="numeric" value={advance} onChange={(e) => setAdvance(e.target.value.replace(/\D/g, ""))} /></div>
+        <div><span className={lbl}>Price (Rs)</span><Input inputMode="numeric" value={total} onChange={(e) => setTotal(e.target.value.replace(/\D/g, ""))} /></div>
+        <div><span className={lbl}>Discount ({discPct ? "%" : "Rs"})</span><Input inputMode="numeric" value={disc} onChange={(e) => setDisc(e.target.value.replace(/\D/g, ""))} /></div>
       </div>
-      {adv > t && <p className="mt-1 text-xs text-[#b4443a]">Advance cannot be more than the total</p>}
+      <div className="mt-2 flex gap-2">
+        <button type="button" className={chip(!discPct)} onClick={() => { setDiscPct(false); setDisc(""); }}>Rs</button>
+        <button type="button" className={chip(discPct)} onClick={() => { setDiscPct(true); setDisc(""); }}>%</button>
+      </div>
+      {dRaw > 0 && net <= 0 && <p className="mt-1 text-xs text-[#b4443a]">Discount must be less than the price</p>}
+      {d > 0 && net > 0 && (
+        <div className="mt-3 flex justify-between rounded-lg bg-[#e3f1ed] px-3 py-2 text-sm font-semibold text-[#2f7d6b]">
+          <span>Payable after discount</span><span>{money(net)}</span>
+        </div>
+      )}
+      <span className={lbl}>{p.walkIn ? "Paid now (Rs)" : "Advance (Rs)"}</span>
+      <Input inputMode="numeric" value={advance} onChange={(e) => setAdvance(e.target.value.replace(/\D/g, ""))} />
+      {adv > net && net > 0 && <p className="mt-1 text-xs text-[#b4443a]">Advance cannot be more than the payable amount</p>}
 
       {adv > 0 && (
         <>
@@ -151,7 +168,7 @@ export function BookForm(p: {
       )}
 
       <div className="mt-4 flex justify-between rounded-lg bg-[#f7e1de] px-3 py-3 text-sm font-semibold text-[#b4443a]">
-        <span>Pending after advance</span><span>{money(Math.max(t - adv, 0))}</span>
+        <span>Pending after advance</span><span>{money(Math.max(net - adv, 0))}</span>
       </div>
       <Button className="mt-4 w-full" disabled={!valid || save.isPending} onClick={() => save.mutate()}>
         {save.isPending ? "Saving…" : p.walkIn ? "Save patient" : "Save booking"}
