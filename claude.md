@@ -2,6 +2,8 @@
 
 Read this first. Project = clinic management web app for **Evergrace Aesthetics Clinic** (skin clinic: Hydra Facial, Laser, PRP, Chemical Peel; Township, Block 8, Sector B1, Lahore). Built by Fassih (GenZ Developerz) for a paying client. Based on the Neo Khata / GymKhata pattern. Scaffolded in Lovable, now maintained as a normal GitHub repo.
 
+> **Accuracy note:** This file is a best-effort summary, NOT 100% accurate. Code, DB and deployment may have changed since it was written. Always verify against the actual files (`src/`, `package.json`, `wrangler.jsonc`, `drizzle/`) before acting, and trust the code over this file. If something here conflicts with the code, follow the code and tell the user.
+
 ## Working rules (user preferences)
 - User writes Roman Urdu. Reply short and precise, max ~3 lines after each step. No long explanations or summaries.
 - Do NOT rewrite the whole project. Give only changed files with their paths.
