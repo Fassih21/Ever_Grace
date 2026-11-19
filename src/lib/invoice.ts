@@ -13,6 +13,7 @@ export type InvoiceData = {
   patient: { name: string; phone: string };
   lines: InvoiceLine[];
   payments: InvoicePayment[];
+  extraDiscount?: number;
 };
 
 const rs = (n: number) => `Rs ${n.toLocaleString("en-US")}`;
@@ -63,8 +64,9 @@ export async function buildInvoicePdf(d: InvoiceData): Promise<Blob> {
   });
 
   const subtotal = d.lines.reduce((t, l) => t + l.price, 0);
-  const discount = d.lines.reduce((t, l) => t + l.discount, 0);
-  const total = d.lines.reduce((t, l) => t + l.amount, 0);
+  const extra = d.extraDiscount ?? 0;
+  const discount = d.lines.reduce((t, l) => t + l.discount, 0) + extra;
+  const total = Math.max(d.lines.reduce((t, l) => t + l.amount, 0) - extra, 0);
   const paid = d.payments.reduce((t, p) => t + p.amount, 0);
   const balance = Math.max(total - paid, 0);
   if (y > 225) { doc.addPage(); y = 20; }
@@ -94,6 +96,9 @@ export async function buildInvoicePdf(d: InvoiceData): Promise<Blob> {
   }
 
   doc.setFont("helvetica", "normal"); doc.setFontSize(9); color(MUT);
+  doc.setFont("helvetica", "bold"); color(RED);
+  doc.text("Payments can't be refunded in any case.", W / 2, 279, { align: "center" });
+  doc.setFont("helvetica", "normal"); color(MUT);
   doc.text(CLINIC.footer, W / 2, 285, { align: "center" });
   return doc.output("blob");
 }

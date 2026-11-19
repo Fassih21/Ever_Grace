@@ -8,9 +8,10 @@ import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { BookForm } from "@/components/book-form";
+import { MakeInvoice, type InvTarget } from "@/components/make-invoice";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { ACTIVE, calcMaxDur, chip, pageAll, useDayAppts, useServices, useSlots } from "@/lib/shared";
-import { fmtDate, fmtTime, initials, money, todayPK } from "@/lib/format";
+import { fmtDate, fmtTime, initials, todayPK } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_app/patients/")({
@@ -21,9 +22,9 @@ export const Route = createFileRoute("/_app/patients/")({
 const Avatar = ({ name }: { name: string }) => (
   <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#e3f1ed] text-xs font-bold text-[#2f7d6b]">{initials(name)}</div>
 );
-const Due = ({ n }: { n: number }) =>
-  n > 0 ? <span className="whitespace-nowrap rounded-full bg-[#f7e1de] px-2.5 py-1 text-xs font-semibold text-[#b4443a]">{money(n)} due</span>
-        : <span className="rounded-full bg-[#e3f1ed] px-2.5 py-1 text-xs font-semibold text-[#2f7d6b]">Cleared</span>;
+const InvBtn = ({ onClick }: { onClick: (e: React.MouseEvent) => void }) => (
+  <Button size="sm" variant="outline" onClick={onClick}>Make invoice</Button>
+);
 
 function Patients() {
   const qc = useQueryClient();
@@ -33,11 +34,11 @@ function Patients() {
   const [q, setQ] = useState("");
   const [adding, setAdding] = useState(false);
   const [slot, setSlot] = useState<number | null>(null);
+  const [inv, setInv] = useState<InvTarget | null>(null);
   const slots = useSlots().data ?? [];
   const services = useServices().data ?? [];
   const day = useDayAppts(today);
   const rows = day.data ?? [];
-  const svc = (id: string | null) => services.find((s) => s.id === id)?.name ?? "";
   const term = q.trim().toLowerCase();
   const isNum = /^[\d\s+-]+$/.test(term);
   const hit = (name: string, phone: string) => !term || name.toLowerCase().includes(term) || (isNum && phone.includes(term.replace(/\D/g, "")));
@@ -98,15 +99,10 @@ function Patients() {
                   </div>
                   <Avatar name={r.patient} />
                   <div className="min-w-0 flex-1"><div className="truncate font-semibold">{r.patient}</div><div className="text-sm text-muted-foreground">{r.phone}</div></div>
-                  <div className="w-32 text-sm">{svc(r.service_id)}</div>
-                  <div className="w-28 text-right text-sm"><b>{money(r.paid_total ?? 0)}</b><div className="text-xs text-muted-foreground">of {money(r.total_amount!)}</div></div>
-                  <div className="w-28 text-right"><Due n={r.balance ?? 0} /></div>
+                  <InvBtn onClick={(e) => { e.preventDefault(); e.stopPropagation(); setInv({ name: r.patient, phone: r.phone }); }} />
                 </Link>
               ))}
-              <div className="flex justify-between bg-[#f7f9f8] px-4 py-3 text-sm font-semibold">
-                <span>Paid on today’s visits {money(todayRows.reduce((t, r) => t + (r.paid_total ?? 0), 0))}</span>
-                <span className="text-[#b4443a]">Pending {money(todayRows.reduce((t, r) => t + (r.balance ?? 0), 0))}</span>
-              </div>
+
             </>
           )
         ) : all.isLoading ? <Skeleton className="m-4 h-40" /> : allRows.length === 0 ? (
@@ -117,7 +113,7 @@ function Patients() {
               <Avatar name={p.name} />
               <div className="min-w-0 flex-1"><div className="truncate font-semibold">{p.name}</div><div className="text-sm text-muted-foreground">{p.phone}</div></div>
               <div className="text-sm text-muted-foreground">{p.visits} visit{p.visits === 1 ? "" : "s"}</div>
-              <div className="w-28 text-right"><Due n={p.due} /></div>
+              <InvBtn onClick={(e) => { e.preventDefault(); e.stopPropagation(); setInv({ name: p.name, phone: p.phone }); }} />
             </Link>
           ))
         )}
@@ -145,6 +141,7 @@ function Patients() {
           )}
         </SheetContent>
       </Sheet>
+      <MakeInvoice target={inv} onClose={() => setInv(null)} />
     </div>
   );
 }
