@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
+import { DayCalendar } from "@/components/day-calendar";
 import { OwnerOnly } from "@/components/owner-only";
 import { ACTIVE, pageAll, useDayAppts, useServices, useSlots } from "@/lib/shared";
 import { addDays, fmtDate, fmtTime, money, todayPK } from "@/lib/format";
@@ -19,18 +20,22 @@ const pk = (d: string) => `${d}T00:00:00+05:00`;
 function Dashboard() {
   const today = todayPK();
   const [mode, setMode] = useState<"today" | "month">("today");
-  const start = mode === "today" ? today : today.slice(0, 8) + "01";
+  const [sel, setSel] = useState(today);
+  const isToday = sel === today;
+  const dayLbl = isToday ? "today" : fmtDate(sel, { day: "numeric", month: "short" });
+  const start = mode === "today" ? sel : today.slice(0, 8) + "01";
+  const end = mode === "today" ? sel : today;
   const services = useServices().data ?? [];
   const slots = useSlots().data ?? [];
-  const day = useDayAppts(today);
+  const day = useDayAppts(sel);
 
   const d = useQuery({
-    queryKey: ["dash", mode, today],
+    queryKey: ["dash", mode, sel, today],
     queryFn: async () => {
       const [pay, exp, sal, open, appts] = await Promise.all([
-        pageAll((f, t) => supabase.from("payments").select("amount,appointment_id").eq("voided", false).gte("paid_at", pk(start)).lt("paid_at", pk(addDays(today, 1))).range(f, t)),
-        pageAll((f, t) => supabase.from("expenses").select("amount").gte("spent_on", start).lte("spent_on", today).range(f, t)),
-        pageAll((f, t) => supabase.from("salaries").select("net").eq("status", "paid").gte("paid_on", start).lte("paid_on", today).range(f, t)),
+        pageAll((f, t) => supabase.from("payments").select("amount,appointment_id").eq("voided", false).gte("paid_at", pk(start)).lt("paid_at", pk(addDays(end, 1))).range(f, t)),
+        pageAll((f, t) => supabase.from("expenses").select("amount").gte("spent_on", start).lte("spent_on", end).range(f, t)),
+        pageAll((f, t) => supabase.from("salaries").select("net").eq("status", "paid").gte("paid_on", start).lte("paid_on", end).range(f, t)),
         pageAll((f, t) => supabase.from("appointment_balance").select("patient_id,balance").gt("balance", 0).in("status", [...ACTIVE]).range(f, t)),
         pageAll((f, t) => supabase.from("appointments").select("id,service_id").order("id").range(f, t)),
       ]);
@@ -70,11 +75,11 @@ function Dashboard() {
   });
 
   const staff = useQuery({
-    queryKey: ["dash", "staff", today],
+    queryKey: ["dash", "staff", sel],
     queryFn: async () => {
       const [s, a, sal] = await Promise.all([
         supabase.from("staff").select("id").eq("active", true),
-        supabase.from("attendance").select("status").eq("work_date", today),
+        supabase.from("attendance").select("status").eq("work_date", sel),
         supabase.from("salaries").select("net").eq("status", "pending"),
       ]);
       return {
@@ -87,9 +92,9 @@ function Dashboard() {
 
   const v = d.data;
   const kpis = [
-    [mode === "today" ? "Collected today" : "Collected this month", v ? money(v.collected) : "", "Payments received", "border-l-[#2f7d6b]"],
+    [mode === "today" ? `Collected ${dayLbl}` : "Collected this month", v ? money(v.collected) : "", "Payments received", "border-l-[#2f7d6b]"],
     ["Pending (all time)", v ? money(v.pending) : "", v ? `${v.owing} patient${v.owing === 1 ? "" : "s"} owe` : "", "border-l-[#b7791f]"],
-    [mode === "today" ? "Expenses today" : "Expenses this month", v ? money(v.expenses) : "", v ? `Incl. salaries paid ${money(v.salaries)}` : "", "border-l-[#e9b8b0]"],
+    [mode === "today" ? `Expenses ${dayLbl}` : "Expenses this month", v ? money(v.expenses) : "", v ? `Incl. salaries paid ${money(v.salaries)}` : "", "border-l-[#e9b8b0]"],
     ["Net", v ? money(v.collected - v.expenses) : "", "Collected − expenses − salaries", "bg-[#14211f] text-white border-0"],
   ];
   const rev = [...(v?.bySvc ?? [])].sort((a, b) => b[1] - a[1]);
@@ -100,10 +105,14 @@ function Dashboard() {
   return (
     <div>
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div><h1 className="serif text-2xl md:text-3xl">Dashboard</h1><p className="text-sm text-muted-foreground">{fmtDate(today, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p></div>
+        <div><h1 className="serif text-2xl md:text-3xl">Dashboard</h1><p className="text-sm text-muted-foreground">{fmtDate(sel, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p></div>
         <div className="flex rounded-xl bg-[#e5eae8] p-1">
-          {(["today", "month"] as const).map((k) => <button key={k} onClick={() => setMode(k)} className={cn("rounded-lg px-5 py-2 text-sm font-semibold capitalize", mode === k ? "bg-card shadow-sm" : "text-muted-foreground")}>{k === "today" ? "Today" : "Month"}</button>)}
+          {(["today", "month"] as const).map((k) => <button key={k} onClick={() => setMode(k)} className={cn("rounded-lg px-5 py-2 text-sm font-semibold capitalize", mode === k ? "bg-card shadow-sm" : "text-muted-foreground")}>{k === "today" ? (isToday ? "Today" : "Day") : "Month"}</button>)}
         </div>
+      </div>
+
+      <div className="mb-4 rounded-2xl border bg-card p-3">
+        <DayCalendar value={sel} onSelect={(d) => { setSel(d); setMode("today"); }} />
       </div>
 
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -119,7 +128,7 @@ function Dashboard() {
       <div className="grid gap-4 lg:grid-cols-[1.3fr_1fr]">
         <div className="space-y-4">
           <div className="rounded-2xl border bg-card p-5">
-            <h3 className="mb-3 flex justify-between font-semibold">Today’s schedule<small className="font-medium text-muted-foreground">{rows.length} booking{rows.length === 1 ? "" : "s"} today</small></h3>
+            <h3 className="mb-3 flex justify-between font-semibold">{isToday ? "Today’s schedule" : "Schedule"}<small className="font-medium text-muted-foreground">{rows.length} booking{rows.length === 1 ? "" : "s"} {isToday ? "today" : fmtDate(sel, { day: "numeric", month: "short" })}</small></h3>
             {slots.map((s) => {
               const a = rows.find((r) => r.start_slot === s.sort_order);
               if (!a && rows.some((r) => s.sort_order > r.start_slot! && s.sort_order < r.start_slot! + r.slots_count!)) return null;
@@ -134,7 +143,7 @@ function Dashboard() {
             })}
           </div>
           <div className="rounded-2xl border bg-card p-5">
-            <h3 className="mb-3 flex justify-between font-semibold">Revenue by service<small className="font-medium text-muted-foreground">{mode === "today" ? "Today" : "This month"}</small></h3>
+            <h3 className="mb-3 flex justify-between font-semibold">Revenue by service<small className="font-medium text-muted-foreground">{mode === "today" ? (isToday ? "Today" : fmtDate(sel, { day: "numeric", month: "short" })) : "This month"}</small></h3>
             {!rev.length ? <p className="text-sm text-muted-foreground">No payments on these visits yet.</p> : rev.map(([id, amt]) => (
               <div key={id} className="my-3 flex items-center gap-3 text-sm">
                 <span className="w-28 shrink-0">{services.find((s) => s.id === id)?.name ?? "Service"}</span>
@@ -162,7 +171,7 @@ function Dashboard() {
           <div className="rounded-2xl border bg-card p-5">
             <h3 className="mb-3 font-semibold">Staff</h3>
             <div className="grid grid-cols-2 gap-4">
-              <div><div className="text-xs text-muted-foreground">Present today</div><div className="serif text-2xl">{staff.data ? `${staff.data.present} / ${staff.data.total}` : "–"}</div></div>
+              <div><div className="text-xs text-muted-foreground">{isToday ? "Present today" : "Present"}</div><div className="serif text-2xl">{staff.data ? `${staff.data.present} / ${staff.data.total}` : "–"}</div></div>
               <div><div className="text-xs text-muted-foreground">Salaries pending</div><div className="serif text-2xl text-[#b7791f]">{staff.data ? money(staff.data.owed) : "–"}</div></div>
             </div>
           </div>

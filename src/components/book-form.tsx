@@ -1,13 +1,15 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Users } from "lucide-react";
+import { Check, ChevronsUpDown, Users } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
-import { ACTIVE, METHODS, chip, type Method } from "@/lib/shared";
-import { fmtDate, money, normPhone } from "@/lib/format";
+import { ACTIVE, chip } from "@/lib/shared";
+import { fmtDate, normPhone } from "@/lib/format";
 
 export function BookForm(p: {
   walkIn?: boolean;
@@ -20,12 +22,8 @@ export function BookForm(p: {
   const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
   const [dur, setDur] = useState(1);
-  const [total, setTotal] = useState("");
-  const [advance, setAdvance] = useState("");
-  const [disc, setDisc] = useState("");
-  const [discPct, setDiscPct] = useState(false);
-  const [method, setMethod] = useState<Method>("cash");
   const [planId, setPlanId] = useState("");
+  const [svcOpen, setSvcOpen] = useState(false);
   const ph = normPhone(phone);
   const phoneOk = /^03\d{9}$/.test(ph);
 
@@ -58,8 +56,6 @@ export function BookForm(p: {
   const plan = openPlans.find((x) => x.id === planId);
   const pickPlan = (id: string) => {
     setPlanId(id);
-    const x = openPlans.find((y) => y.id === id);
-    if (x) setTotal(String(Math.round(x.total_price / x.total_sessions)));
   };
 
   const pickService = (id: string) => {
@@ -67,23 +63,16 @@ export function BookForm(p: {
     setServiceId(id);
     setPlanId("");
     if (s) {
-      setTotal(s.default_price ? String(s.default_price) : "");
       setDur(Math.min(s.default_slots, p.maxDur));
     }
   };
-  const t = Number(total) || 0;
-  const dRaw = Number(disc) || 0;
-  const d = Math.min(discPct ? Math.round((t * dRaw) / 100) : dRaw, t);
-  const net = t - d;
-  const adv = Number(advance) || 0;
-  const valid = !!serviceId && phoneOk && !!shownName.trim() && net > 0 && adv >= 0 && adv <= net;
+  const valid = !!serviceId && phoneOk && !!shownName.trim();
 
   const save = useMutation({
     mutationFn: async () => {
       const { error } = await supabase.rpc("book_appointment", {
         p_phone: ph, p_name: shownName.trim(), p_service_id: serviceId, p_appt_date: p.date,
-        p_start_slot: p.start, p_slots_count: dur, p_total_amount: net, p_discount_amount: d, p_advance_amount: adv,
-        ...(adv > 0 ? { p_payment_method: method } : {}),
+        p_start_slot: p.start, p_slots_count: dur, p_total_amount: 0, p_discount_amount: 0, p_advance_amount: 0,
         ...(plan ? { p_plan_id: plan.id } : {}),
       });
       if (error) throw error;
@@ -104,9 +93,30 @@ export function BookForm(p: {
       <p className="text-sm text-muted-foreground">{fmtDate(p.date, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p>
 
       <span className={lbl}>Service</span>
-      <div className="flex flex-wrap gap-2">
-        {p.services.map((s) => <button key={s.id} type="button" className={chip(serviceId === s.id)} onClick={() => pickService(s.id)}>{s.name}</button>)}
-      </div>
+      <Popover open={svcOpen} onOpenChange={setSvcOpen} modal>
+        <PopoverTrigger asChild>
+          <Button type="button" variant="outline" role="combobox" className="w-full justify-between font-normal">
+            <span className={cn("truncate", !serviceId && "text-muted-foreground")}>
+              {p.services.find((x) => x.id === serviceId)?.name ?? "Select service…"}
+            </span>
+            <ChevronsUpDown className="size-4 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
+          <Command>
+            <CommandInput placeholder="Search service…" />
+            <CommandList>
+              <CommandEmpty>No service found.</CommandEmpty>
+              {p.services.map((s) => (
+                <CommandItem key={s.id} value={s.name} onSelect={() => { pickService(s.id); setSvcOpen(false); }}>
+                  <Check className={cn("mr-2 size-4", serviceId === s.id ? "opacity-100" : "opacity-0")} />
+                  {s.name}
+                </CommandItem>
+              ))}
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
 
       {openPlans.length > 0 && (
         <>
@@ -140,36 +150,7 @@ export function BookForm(p: {
       <span className={lbl}>Patient name</span>
       <Input value={shownName} readOnly={!!ex} className={ex ? "bg-muted" : ""} onChange={(e) => setName(e.target.value)} />
 
-      <div className="grid grid-cols-2 gap-3">
-        <div><span className={lbl}>Price (Rs)</span><Input inputMode="numeric" value={total} onChange={(e) => setTotal(e.target.value.replace(/\D/g, ""))} /></div>
-        <div><span className={lbl}>Discount ({discPct ? "%" : "Rs"})</span><Input inputMode="numeric" value={disc} onChange={(e) => setDisc(e.target.value.replace(/\D/g, ""))} /></div>
-      </div>
-      <div className="mt-2 flex gap-2">
-        <button type="button" className={chip(!discPct)} onClick={() => { setDiscPct(false); setDisc(""); }}>Rs</button>
-        <button type="button" className={chip(discPct)} onClick={() => { setDiscPct(true); setDisc(""); }}>%</button>
-      </div>
-      {dRaw > 0 && net <= 0 && <p className="mt-1 text-xs text-[#b4443a]">Discount must be less than the price</p>}
-      {d > 0 && net > 0 && (
-        <div className="mt-3 flex justify-between rounded-lg bg-[#e3f1ed] px-3 py-2 text-sm font-semibold text-[#2f7d6b]">
-          <span>Payable after discount</span><span>{money(net)}</span>
-        </div>
-      )}
-      <span className={lbl}>{p.walkIn ? "Paid now (Rs)" : "Advance (Rs)"}</span>
-      <Input inputMode="numeric" value={advance} onChange={(e) => setAdvance(e.target.value.replace(/\D/g, ""))} />
-      {adv > net && net > 0 && <p className="mt-1 text-xs text-[#b4443a]">Advance cannot be more than the payable amount</p>}
-
-      {adv > 0 && (
-        <>
-          <span className={lbl}>Payment method</span>
-          <div className="flex flex-wrap gap-2">
-            {METHODS.map((m) => <button key={m.v} type="button" className={chip(method === m.v)} onClick={() => setMethod(m.v)}>{m.l}</button>)}
-          </div>
-        </>
-      )}
-
-      <div className="mt-4 flex justify-between rounded-lg bg-[#f7e1de] px-3 py-3 text-sm font-semibold text-[#b4443a]">
-        <span>Pending after advance</span><span>{money(Math.max(net - adv, 0))}</span>
-      </div>
+      <p className="mt-4 text-xs text-muted-foreground">Price baad mein appointment detail se add hogi.</p>
       <Button className="mt-4 w-full" disabled={!valid || save.isPending} onClick={() => save.mutate()}>
         {save.isPending ? "Saving…" : p.walkIn ? "Save patient" : "Save booking"}
       </Button>

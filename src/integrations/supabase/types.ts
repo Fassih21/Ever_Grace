@@ -619,6 +619,16 @@ export type Database = {
         }
         Returns: string
       }
+      set_appointment_billing: {
+        Args: {
+          p_advance?: number
+          p_appointment_id: string
+          p_discount: number
+          p_method?: Database["public"]["Enums"]["payment_method"]
+          p_price: number
+        }
+        Returns: undefined
+      }
       get_or_create_invoice: {
         Args: { p_date: string; p_patient_id: string }
         Returns: number
