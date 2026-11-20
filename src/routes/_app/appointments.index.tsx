@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -17,15 +17,16 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { BookForm } from "@/components/book-form";
 import { InvoiceDialog, type InvoiceTarget } from "@/components/invoice-dialog";
-import { calcMaxDur, useDayAppts, useServices, useSlots } from "@/lib/shared";
+import { STATUS, type Status, calcMaxDur, useDayAppts, useServices, useSlots } from "@/lib/shared";
 import { addDays, fmtDate, fmtTime, money, todayPK } from "@/lib/format";
 
-export const Route = createFileRoute("/_app/appointments")({
+export const Route = createFileRoute("/_app/appointments/")({
   head: () => ({ meta: [{ title: "Appointments · Evergrace Clinic" }] }),
   component: Appointments,
 });
 
 function Appointments() {
+  const nav = useNavigate();
   const qc = useQueryClient();
   const isMobile = useIsMobile();
   const today = todayPK();
@@ -118,13 +119,13 @@ function Appointments() {
                   <div className="w-28 shrink-0">
                     <div className="text-sm font-semibold tabular-nums">{time}</div>
                     <span className={cn("mt-1 inline-block rounded-full px-2.5 py-0.5 text-[11px] font-semibold",
-                      !a ? "border border-dashed text-muted-foreground" : a.status === "completed" ? "bg-[#e3f1ed] text-[#2f7d6b]" : "bg-[#fdf3dc] text-[#b7791f]")}>
-                      {!a ? "Free" : a.status === "completed" ? "Completed" : "Booked"}
+                      !a ? "border border-dashed text-muted-foreground" : STATUS[a.status as Status].cls)}>
+                      {!a ? "Free" : STATUS[a.status as Status].label}
                     </span>
                   </div>
                   {a ? (
                     <>
-                      <div className="min-w-0 flex-1">
+                      <div className="min-w-0 flex-1 cursor-pointer" role="button" onClick={() => nav({ to: "/appointments/$id", params: { id: a.id! } })}>
                         <div className="truncate font-semibold">{a.patient}</div>
                         <div className="truncate text-sm text-muted-foreground">
                           {svcName(a.service_id)}{a.slots_count! > 1 ? ` · ${a.slots_count} slots` : ""}

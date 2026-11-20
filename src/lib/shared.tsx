@@ -10,6 +10,14 @@ export const METHODS: { v: Method; l: string }[] = [
 ];
 export const ACTIVE = ["booked", "completed"] as const;
 
+export const STATUS = {
+  booked: { label: "Booked", cls: "bg-[#fdf3dc] text-[#b7791f]" },
+  completed: { label: "Completed", cls: "bg-[#e3f1ed] text-[#2f7d6b]" },
+  on_hold: { label: "On hold", cls: "bg-[#e6eefb] text-[#2f5fa8]" },
+  cancelled: { label: "Cancelled", cls: "bg-[#fbe9e6] text-[#b4443a]" },
+} as const;
+export type Status = keyof typeof STATUS;
+
 export const chip = (on: boolean) =>
   cn(
     "whitespace-nowrap rounded-full border px-4 py-2 text-sm font-medium transition-colors",
@@ -34,7 +42,7 @@ export function useDayAppts(date: string) {
     queryKey: ["appts", date],
     queryFn: async () => {
       const { data: rows } = await supabase
-        .from("appointment_balance").select("*").eq("appt_date", date).in("status", [...ACTIVE]);
+        .from("appointment_balance").select("*").eq("appt_date", date).in("status", [...ACTIVE, "on_hold"]);
       const ids = [...new Set((rows ?? []).map((r) => r.patient_id!))];
       const { data: pts } = ids.length ? await supabase.from("patients").select("id,name,phone").in("id", ids) : { data: [] };
       const m = new Map((pts ?? []).map((p) => [p.id, p]));

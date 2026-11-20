@@ -12,12 +12,13 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as LoginRouteImport } from './routes/login'
-import { Route as AppAppointmentsRouteImport } from './routes/_app/appointments'
 import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
 import { Route as AppExpensesRouteImport } from './routes/_app/expenses'
 import { Route as AppPendingRouteImport } from './routes/_app/pending'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as AppStaffRouteImport } from './routes/_app/staff'
+import { Route as AppAppointmentsIndexRouteImport } from './routes/_app/appointments.index'
+import { Route as AppAppointmentsIdRouteImport } from './routes/_app/appointments.$id'
 import { Route as AppPatientsIndexRouteImport } from './routes/_app/patients.index'
 import { Route as AppPatientsIdRouteImport } from './routes/_app/patients.$id'
 
@@ -34,11 +35,6 @@ const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
   getParentRoute: () => rootRouteImport,
-} as any)
-const AppAppointmentsRoute = AppAppointmentsRouteImport.update({
-  id: '/appointments',
-  path: '/appointments',
-  getParentRoute: () => AppRoute,
 } as any)
 const AppDashboardRoute = AppDashboardRouteImport.update({
   id: '/dashboard',
@@ -65,6 +61,16 @@ const AppStaffRoute = AppStaffRouteImport.update({
   path: '/staff',
   getParentRoute: () => AppRoute,
 } as any)
+const AppAppointmentsIndexRoute = AppAppointmentsIndexRouteImport.update({
+  id: '/appointments/',
+  path: '/appointments/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAppointmentsIdRoute = AppAppointmentsIdRouteImport.update({
+  id: '/appointments/$id',
+  path: '/appointments/$id',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppPatientsIndexRoute = AppPatientsIndexRouteImport.update({
   id: '/patients/',
   path: '/patients/',
@@ -79,25 +85,27 @@ const AppPatientsIdRoute = AppPatientsIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
-  '/appointments': typeof AppAppointmentsRoute
   '/dashboard': typeof AppDashboardRoute
   '/expenses': typeof AppExpensesRoute
   '/pending': typeof AppPendingRoute
   '/settings': typeof AppSettingsRoute
   '/staff': typeof AppStaffRoute
+  '/appointments/$id': typeof AppAppointmentsIdRoute
   '/patients/$id': typeof AppPatientsIdRoute
+  '/appointments/': typeof AppAppointmentsIndexRoute
   '/patients/': typeof AppPatientsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
-  '/appointments': typeof AppAppointmentsRoute
   '/dashboard': typeof AppDashboardRoute
   '/expenses': typeof AppExpensesRoute
   '/pending': typeof AppPendingRoute
   '/settings': typeof AppSettingsRoute
   '/staff': typeof AppStaffRoute
+  '/appointments/$id': typeof AppAppointmentsIdRoute
   '/patients/$id': typeof AppPatientsIdRoute
+  '/appointments': typeof AppAppointmentsIndexRoute
   '/patients': typeof AppPatientsIndexRoute
 }
 export interface FileRoutesById {
@@ -105,13 +113,14 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
-  '/_app/appointments': typeof AppAppointmentsRoute
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/expenses': typeof AppExpensesRoute
   '/_app/pending': typeof AppPendingRoute
   '/_app/settings': typeof AppSettingsRoute
   '/_app/staff': typeof AppStaffRoute
+  '/_app/appointments/$id': typeof AppAppointmentsIdRoute
   '/_app/patients/$id': typeof AppPatientsIdRoute
+  '/_app/appointments/': typeof AppAppointmentsIndexRoute
   '/_app/patients/': typeof AppPatientsIndexRoute
 }
 export interface FileRouteTypes {
@@ -119,38 +128,41 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
-    | '/appointments'
     | '/dashboard'
     | '/expenses'
     | '/pending'
     | '/settings'
     | '/staff'
+    | '/appointments/$id'
     | '/patients/$id'
+    | '/appointments/'
     | '/patients/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/login'
-    | '/appointments'
     | '/dashboard'
     | '/expenses'
     | '/pending'
     | '/settings'
     | '/staff'
+    | '/appointments/$id'
     | '/patients/$id'
+    | '/appointments'
     | '/patients'
   id:
     | '__root__'
     | '/'
     | '/_app'
     | '/login'
-    | '/_app/appointments'
     | '/_app/dashboard'
     | '/_app/expenses'
     | '/_app/pending'
     | '/_app/settings'
     | '/_app/staff'
+    | '/_app/appointments/$id'
     | '/_app/patients/$id'
+    | '/_app/appointments/'
     | '/_app/patients/'
   fileRoutesById: FileRoutesById
 }
@@ -182,13 +194,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
-    }
-    '/_app/appointments': {
-      id: '/_app/appointments'
-      path: '/appointments'
-      fullPath: '/appointments'
-      preLoaderRoute: typeof AppAppointmentsRouteImport
-      parentRoute: typeof AppRoute
     }
     '/_app/dashboard': {
       id: '/_app/dashboard'
@@ -225,6 +230,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppStaffRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/appointments/': {
+      id: '/_app/appointments/'
+      path: '/appointments'
+      fullPath: '/appointments/'
+      preLoaderRoute: typeof AppAppointmentsIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/appointments/$id': {
+      id: '/_app/appointments/$id'
+      path: '/appointments/$id'
+      fullPath: '/appointments/$id'
+      preLoaderRoute: typeof AppAppointmentsIdRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/patients/': {
       id: '/_app/patients/'
       path: '/patients'
@@ -243,24 +262,26 @@ declare module '@tanstack/react-router' {
 }
 
 interface AppRouteChildren {
-  AppAppointmentsRoute: typeof AppAppointmentsRoute
   AppDashboardRoute: typeof AppDashboardRoute
   AppExpensesRoute: typeof AppExpensesRoute
   AppPendingRoute: typeof AppPendingRoute
   AppSettingsRoute: typeof AppSettingsRoute
   AppStaffRoute: typeof AppStaffRoute
+  AppAppointmentsIdRoute: typeof AppAppointmentsIdRoute
   AppPatientsIdRoute: typeof AppPatientsIdRoute
+  AppAppointmentsIndexRoute: typeof AppAppointmentsIndexRoute
   AppPatientsIndexRoute: typeof AppPatientsIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
-  AppAppointmentsRoute: AppAppointmentsRoute,
   AppDashboardRoute: AppDashboardRoute,
   AppExpensesRoute: AppExpensesRoute,
   AppPendingRoute: AppPendingRoute,
   AppSettingsRoute: AppSettingsRoute,
   AppStaffRoute: AppStaffRoute,
+  AppAppointmentsIdRoute: AppAppointmentsIdRoute,
   AppPatientsIdRoute: AppPatientsIdRoute,
+  AppAppointmentsIndexRoute: AppAppointmentsIndexRoute,
   AppPatientsIndexRoute: AppPatientsIndexRoute,
 }
 
