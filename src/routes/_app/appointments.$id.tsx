@@ -5,6 +5,7 @@ import { ChevronLeft } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
+import { BillingPanel } from "@/components/billing-panel";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { STATUS, useServices, useSlots, type Status } from "@/lib/shared";
@@ -42,7 +43,7 @@ function Detail() {
       if (error) throw error;
     },
     onSuccess: () => {
-      ["appt", "appts", "pending", "dash"].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+      ["appt", "appts", "pending", "dash", "patient-detail"].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
       toast.success("Status updated");
     },
     onError: (e: Error) =>
@@ -73,10 +74,14 @@ function Detail() {
         {row("Service", svc)}
         {row("Date", fmtDate(a.appt_date!, { weekday: "short", day: "numeric", month: "short", year: "numeric" }))}
         {s0 && s1 && row("Time", `${fmtTime(s0.start_time)} – ${fmtTime(s1.end_time)}`)}
-        {row("Total", money(a.total_amount!))}
-        {row("Paid", money(a.paid_total!))}
-        {row("Pending", money(a.balance!))}
+        {a.total_amount! > 0 ? row("Total", money(a.total_amount!)) : row("Price", "Not set")}
+        {a.total_amount! > 0 && row("Paid", money(a.paid_total!))}
+        {a.total_amount! > 0 && row("Pending", money(a.balance!))}
       </div>
+      {(a.status !== "cancelled" && a.status !== "no_show") && (
+        <BillingPanel key={`${a.total_amount}-${a.paid_total}`} id={id} total={a.total_amount!} discount={a.discount_amount ?? 0} paid={a.paid_total ?? 0}
+          defaultPrice={services.find((s) => s.id === a.service_id)?.default_price ?? 0} />
+      )}
 
       <div className="mb-2 text-sm font-semibold">Status</div>
       <div className="grid grid-cols-2 gap-3">

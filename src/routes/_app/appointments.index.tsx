@@ -132,9 +132,13 @@ function Appointments() {
                         </div>
                       </div>
                       <div className="text-right text-sm">
-                        <div className="font-semibold">{money(a.total_amount!)}</div>
-                        {(a.discount_amount ?? 0) > 0 && <div className="text-xs text-muted-foreground">Discount {money(a.discount_amount!)}</div>}
-                        {a.balance ? <div className="whitespace-nowrap text-[#b4443a]">Pending {money(a.balance)}</div> : <div className="text-[#2f7d6b]">Paid in full</div>}
+                        {a.total_amount! > 0 ? (
+                          <>
+                            <div className="font-semibold">{money(a.total_amount!)}</div>
+                            {(a.discount_amount ?? 0) > 0 && <div className="text-xs text-muted-foreground">Discount {money(a.discount_amount!)}</div>}
+                            {a.balance ? <div className="whitespace-nowrap text-[#b4443a]">Pending {money(a.balance)}</div> : <div className="text-[#2f7d6b]">Paid in full</div>}
+                          </>
+                        ) : <div className="text-xs text-muted-foreground">Price not set</div>}
                       </div>
                       {a.status === "completed" && <Button size="sm" variant="outline" onClick={() => setInv({ patientId: a.patient_id!, date: a.appt_date! })}>Invoice</Button>}
                       {a.status === "booked" && (

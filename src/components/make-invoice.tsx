@@ -1,12 +1,14 @@
 import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { useServices } from "@/lib/shared";
+import { METHODS, useServices, type Method } from "@/lib/shared";
 import { buildInvoicePdf, downloadBlob } from "@/lib/invoice";
-import { fmtDate, money, todayPK } from "@/lib/format";
+import { fmtDate, money, normPhone, todayPK } from "@/lib/format";
 
 export type InvTarget = { name: string; phone: string };
 type Row = { name: string; price: string; qty: string };
@@ -33,7 +35,23 @@ function Form({ target }: { target: InvTarget }) {
   const [disc, setDisc] = useState("");
   const [pct, setPct] = useState(false);
   const [received, setReceived] = useState("");
-  const [method, setMethod] = useState("Cash");
+  const [method, setMethod] = useState<Method>("cash");
+  const [apptId, setApptId] = useState<string | null>(null);
+  const qc = useQueryClient();
+  const appts = useQuery({
+    queryKey: ["inv-appts", normPhone(target.phone)],
+    queryFn: async () => {
+      const { data: pt } = await supabase.from("patients").select("id").eq("phone", normPhone(target.phone)).maybeSingle();
+      if (!pt) return [];
+      const { data } = await supabase.from("appointment_balance").select("id,appt_date,service_id,total_amount,paid_total,status")
+        .eq("patient_id", pt.id).in("status", ["booked", "completed", "on_hold"]).order("appt_date", { ascending: false });
+      return data ?? [];
+    },
+  });
+  const list = appts.data ?? [];
+  const defId = (list.find((a) => a.appt_date === todayPK() && a.total_amount === 0) ?? list.find((a) => a.total_amount === 0))?.id ?? "";
+  const sel = apptId ?? defId;
+  const linked = list.find((a) => a.id === sel);
   const [busy, setBusy] = useState(false);
 
   const set = (i: number, k: keyof Row, v: string) =>
@@ -49,13 +67,19 @@ function Form({ target }: { target: InvTarget }) {
   const discount = Math.min(pct ? Math.round((subtotal * num(disc)) / 100) : num(disc), subtotal);
   const total = subtotal - discount;
   const paid = Math.min(num(received), total);
-  const balance = total - paid;
+  const prevPaid = linked?.paid_total ?? 0;
+  const balance = total - paid - prevPaid;
 
   async function run(print: boolean) {
     setBusy(true);
     try {
       if (!name.trim()) throw new Error("Enter patient name");
       if (!lines.length) throw new Error("Add at least one procedure with price");
+      if (sel) {
+        const { error } = await supabase.rpc("set_appointment_billing", { p_appointment_id: sel, p_price: subtotal, p_discount: discount, p_advance: paid, ...(paid > 0 ? { p_method: method } : {}) });
+        if (error) throw error;
+        qc.invalidateQueries();
+      }
       const number = `EVG-${date.replaceAll("-", "")}-${Date.now().toString().slice(-4)}`;
       const blob = await buildInvoicePdf({
         number, date: fmtDate(date, { day: "numeric", month: "long", year: "numeric" }),
@@ -64,7 +88,7 @@ function Form({ target }: { target: InvTarget }) {
           const q = num(r.qty) || 1, a = num(r.price) * q;
           return { service: q > 1 ? `${r.name.trim()} x ${q}` : r.name.trim(), when: fmtDate(date, { day: "numeric", month: "short" }), price: a, discount: 0, amount: a };
         }),
-        payments: paid > 0 ? [{ date: fmtDate(date, { day: "numeric", month: "short", year: "numeric" }), method, amount: paid }] : [],
+        payments: paid > 0 ? [{ date: fmtDate(date, { day: "numeric", month: "short", year: "numeric" }), method: METHODS.find((m) => m.v === method)!.l, amount: paid }] : [],
       });
       if (print) window.open(URL.createObjectURL(blob), "_blank");
       else downloadBlob(blob, `Invoice-${number}-${name.trim().replace(/\s+/g, "-")}.pdf`);
@@ -79,6 +103,12 @@ function Form({ target }: { target: InvTarget }) {
         <Input placeholder="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
         <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
       </div>
+      {list.length > 0 && (
+        <select className="w-full rounded-md border bg-background px-2 py-2 text-sm" value={sel} onChange={(e) => setApptId(e.target.value)}>
+          <option value="">Not linked (PDF only, pending won't update)</option>
+          {list.map((a) => <option key={a.id!} value={a.id!}>{fmtDate(a.appt_date!, { day: "numeric", month: "short" })} · {services.find((x) => x.id === a.service_id)?.name}{a.total_amount ? ` · ${money(a.total_amount)}` : " · price not set"}</option>)}
+        </select>
+      )}
       <div className="space-y-2">
         <datalist id="svc">{services.map((s) => <option key={s.id} value={s.name} />)}</datalist>
         {rows.map((r, i) => (
@@ -98,8 +128,8 @@ function Form({ target }: { target: InvTarget }) {
         </div>
         <div className="flex gap-2">
           <Input inputMode="numeric" placeholder="Received" value={received} onChange={(e) => setReceived(e.target.value)} />
-          <select className="rounded-md border bg-background px-2 text-sm" value={method} onChange={(e) => setMethod(e.target.value)}>
-            <option>Cash</option><option>Card</option><option>Online</option>
+          <select className="rounded-md border bg-background px-2 text-sm" value={method} onChange={(e) => setMethod(e.target.value as Method)}>
+            {METHODS.map((m) => <option key={m.v} value={m.v}>{m.l}</option>)}
           </select>
         </div>
       </div>
