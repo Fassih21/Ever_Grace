@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Users } from "lucide-react";
+import { Check, ChevronsUpDown, Users } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
 import { ACTIVE, METHODS, chip, type Method } from "@/lib/shared";
 import { fmtDate, money, normPhone } from "@/lib/format";
@@ -26,6 +28,7 @@ export function BookForm(p: {
   const [discPct, setDiscPct] = useState(false);
   const [method, setMethod] = useState<Method>("cash");
   const [planId, setPlanId] = useState("");
+  const [svcOpen, setSvcOpen] = useState(false);
   const ph = normPhone(phone);
   const phoneOk = /^03\d{9}$/.test(ph);
 
@@ -104,9 +107,30 @@ export function BookForm(p: {
       <p className="text-sm text-muted-foreground">{fmtDate(p.date, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p>
 
       <span className={lbl}>Service</span>
-      <div className="flex flex-wrap gap-2">
-        {p.services.map((s) => <button key={s.id} type="button" className={chip(serviceId === s.id)} onClick={() => pickService(s.id)}>{s.name}</button>)}
-      </div>
+      <Popover open={svcOpen} onOpenChange={setSvcOpen} modal>
+        <PopoverTrigger asChild>
+          <Button type="button" variant="outline" role="combobox" className="w-full justify-between font-normal">
+            <span className={cn("truncate", !serviceId && "text-muted-foreground")}>
+              {p.services.find((x) => x.id === serviceId)?.name ?? "Select service…"}
+            </span>
+            <ChevronsUpDown className="size-4 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
+          <Command>
+            <CommandInput placeholder="Search service…" />
+            <CommandList>
+              <CommandEmpty>No service found.</CommandEmpty>
+              {p.services.map((s) => (
+                <CommandItem key={s.id} value={s.name} onSelect={() => { pickService(s.id); setSvcOpen(false); }}>
+                  <Check className={cn("mr-2 size-4", serviceId === s.id ? "opacity-100" : "opacity-0")} />
+                  {s.name}
+                </CommandItem>
+              ))}
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
 
       {openPlans.length > 0 && (
         <>

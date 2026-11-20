@@ -132,10 +132,10 @@ function Dashboard() {
             {slots.map((s) => {
               const a = rows.find((r) => r.start_slot === s.sort_order);
               if (!a && rows.some((r) => s.sort_order > r.start_slot! && s.sort_order < r.start_slot! + r.slots_count!)) return null;
-              const endSlot = a ? slots.find((x) => x.sort_order === a.start_slot! + a.slots_count! - 1) ?? s : s;
+              const end = a ? slots.find((x) => x.sort_order === a.start_slot! + a.slots_count! - 1) ?? s : s;
               return (
                 <div key={s.id} className="flex items-center gap-3 border-t py-2.5 text-sm first:border-t-0">
-                  <div className="w-28 shrink-0 text-muted-foreground tabular-nums">{fmtTime(s.start_time)} – {fmtTime(endSlot.end_time)}</div>
+                  <div className="w-28 shrink-0 text-muted-foreground tabular-nums">{fmtTime(s.start_time)} – {fmtTime(end.end_time)}</div>
                   <div className="min-w-0 flex-1">{a ? <><b>{a.patient}</b><span className="text-muted-foreground"> · {services.find((x) => x.id === a.service_id)?.name}{a.slots_count! > 1 ? ` · ${a.slots_count} slots` : ""}</span></> : <span className="text-muted-foreground">Open slot</span>}</div>
                   <span className={cn("rounded-full px-2.5 py-0.5 text-[11px] font-semibold", !a ? "border border-dashed text-muted-foreground" : a.status === "completed" ? "bg-[#e3f1ed] text-[#2f7d6b]" : "bg-[#e8eefb] text-[#3a5bb0]")}>{!a ? "Free" : a.status === "completed" ? "Completed" : "Booked"}</span>
                 </div>

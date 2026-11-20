@@ -39,8 +39,6 @@ function Appointments() {
   const past = date < today;
 
   const day = useDayAppts(date);
-  
-
   const svcName = (id: string | null) => services.find((s) => s.id === id)?.name ?? "";
   const rows = day.data ?? [];
   const startAt = (order: number) => rows.find((r) => r.start_slot === order);
@@ -101,7 +99,7 @@ function Appointments() {
         </div>
       </div>
 
-            <div className="mb-5 rounded-2xl border bg-card p-3">
+      <div className="mb-5 rounded-2xl border bg-card p-3">
         <DayCalendar value={date} onSelect={(d) => { setDate(d); setSel(null); }} />
       </div>
 
