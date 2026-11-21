@@ -6,7 +6,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Link } from "@tanstack/react-router";
+import { ChevronLeft, ChevronRight, Clock, Sparkles, UserCog, Users as UsersIcon, Wallet } from "lucide-react";
 import { OwnerOnly } from "@/components/owner-only";
 import { createManager, setUserActive } from "@/lib/users.functions";
 import { fmtTime } from "@/lib/format";
@@ -19,17 +20,49 @@ export const Route = createFileRoute("/_app/settings")({
 const box = "flex flex-wrap items-center gap-3 border-b px-4 py-3 last:border-b-0";
 const lbl = "text-xs text-muted-foreground";
 
+const SECTIONS = [
+  { k: "services", t: "Services", d: "Treatments, prices and default slots", i: Sparkles },
+  { k: "slots", t: "Slots", d: "Clinic timings and breaks", i: Clock },
+  { k: "users", t: "Users", d: "Managers and access", i: UserCog },
+] as const;
+const LINKS = [
+  { to: "/staff", t: "Staff", d: "Attendance and salaries", i: UsersIcon },
+  { to: "/expenses", t: "Expenses", d: "Clinic expenses", i: Wallet },
+] as const;
+const row = "flex w-full items-center gap-3 border-b px-4 py-4 text-left last:border-b-0 hover:bg-accent";
+
 function Settings() {
+  const [view, setView] = useState<string | null>(null);
+  const sec = SECTIONS.find((x) => x.k === view);
+  if (sec) {
+    return (
+      <div>
+        <button className="mb-3 flex items-center gap-1 text-sm text-muted-foreground" onClick={() => setView(null)}><ChevronLeft className="size-4" />Settings</button>
+        <h1 className="serif mb-1 text-2xl md:text-3xl">{sec.t}</h1>
+        <p className="text-sm text-muted-foreground">{sec.d}</p>
+        {view === "services" && <Services />}
+        {view === "slots" && <Slots />}
+        {view === "users" && <Users />}
+      </div>
+    );
+  }
+  const inner = (x: { t: string; d: string; i: typeof Clock }) => (
+    <>
+      <span className="grid size-10 place-items-center rounded-xl bg-[#e3f1ed] text-[#2f7d6b]"><x.i className="size-5" /></span>
+      <span className="min-w-0 flex-1"><span className="block font-semibold">{x.t}</span><span className="block text-xs text-muted-foreground">{x.d}</span></span>
+      <ChevronRight className="size-4 text-muted-foreground" />
+    </>
+  );
   return (
-    <div>
+    <div className="max-w-2xl">
       <h1 className="serif text-2xl md:text-3xl">Settings</h1>
-      <p className="mb-5 text-sm text-muted-foreground">Services, slots and users.</p>
-      <Tabs defaultValue="services">
-        <TabsList><TabsTrigger value="services">Services</TabsTrigger><TabsTrigger value="slots">Slots</TabsTrigger><TabsTrigger value="users">Users</TabsTrigger></TabsList>
-        <TabsContent value="services"><Services /></TabsContent>
-        <TabsContent value="slots"><Slots /></TabsContent>
-        <TabsContent value="users"><Users /></TabsContent>
-      </Tabs>
+      <p className="mb-5 text-sm text-muted-foreground">Manage your clinic.</p>
+      <div className="overflow-hidden rounded-2xl border bg-card">
+        {SECTIONS.map((x) => <button key={x.k} className={row} onClick={() => setView(x.k)}>{inner(x)}</button>)}
+      </div>
+      <div className="mt-4 overflow-hidden rounded-2xl border bg-card">
+        {LINKS.map((x) => <Link key={x.to} to={x.to} className={row}>{inner(x)}</Link>)}
+      </div>
     </div>
   );
 }
@@ -46,9 +79,12 @@ function Services() {
   const { done, fail } = useSave("services");
   const q = useQuery({ queryKey: ["services-all"], queryFn: async () => (await supabase.from("services").select("*").order("name")).data ?? [] });
   const [n, setN] = useState({ name: "", price: "", slots: "1" });
+  const [find, setFind] = useState("");
   return (
-    <div className="mt-4 overflow-hidden rounded-2xl border bg-card">
-      {(q.data ?? []).map((s) => <ServiceRow key={s.id + s.updated_at} s={s} onDone={done} onFail={fail} />)}
+    <div className="mt-4">
+    <Input className="mb-3" placeholder="Search service…" value={find} onChange={(e) => setFind(e.target.value)} />
+    <div className="overflow-hidden rounded-2xl border bg-card">
+      {(q.data ?? []).filter((s) => s.name.toLowerCase().includes(find.toLowerCase())).map((s) => <ServiceRow key={s.id + s.updated_at} s={s} onDone={done} onFail={fail} />)}
       <div className={box + " bg-[#f7f9f8]"}>
         <div className="min-w-[160px] flex-1"><div className={lbl}>New service</div><Input value={n.name} onChange={(e) => setN({ ...n, name: e.target.value })} placeholder="e.g. Microneedling" /></div>
         <div className="w-28"><div className={lbl}>Price (Rs)</div><Input inputMode="numeric" value={n.price} onChange={(e) => setN({ ...n, price: e.target.value.replace(/\D/g, "") })} /></div>
@@ -59,6 +95,7 @@ function Services() {
           setN({ name: "", price: "", slots: "1" }); done();
         }}>Add</Button>
       </div>
+    </div>
     </div>
   );
 }
