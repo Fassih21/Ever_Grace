@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronsUpDown, Users } from "lucide-react";
+import { Check, ChevronsUpDown, Plus, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,10 @@ export function BookForm(p: {
   onDone: () => void;
 }) {
   const qc = useQueryClient();
-  const [serviceId, setServiceId] = useState("");
+  const [chosen, setChosen] = useState<string[]>([]);
+  const [cur, setCur] = useState("");
+  const allIds = cur && !chosen.includes(cur) ? [...chosen, cur] : chosen;
+  const serviceId = allIds[0] ?? "";
   const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
   const [dur, setDur] = useState(1);
@@ -59,23 +62,29 @@ export function BookForm(p: {
   };
 
   const pickService = (id: string) => {
-    const s = p.services.find((x) => x.id === id);
-    setServiceId(id);
+    setCur(id);
     setPlanId("");
-    if (s) {
-      setDur(Math.min(s.default_slots, p.maxDur));
+    if (!chosen.length) {
+      const s = p.services.find((x) => x.id === id);
+      if (s) setDur(Math.min(s.default_slots, p.maxDur));
     }
   };
+  const addCur = () => { if (cur && !chosen.includes(cur)) setChosen([...chosen, cur]); setCur(""); };
+  const removeSvc = (id: string) => { setChosen(chosen.filter((x) => x !== id)); setPlanId(""); };
   const valid = !!serviceId && phoneOk && !!shownName.trim();
 
   const save = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.rpc("book_appointment", {
+      const { data: id, error } = await supabase.rpc("book_appointment", {
         p_phone: ph, p_name: shownName.trim(), p_service_id: serviceId, p_appt_date: p.date,
         p_start_slot: p.start, p_slots_count: dur, p_total_amount: 0, p_discount_amount: 0, p_advance_amount: 0,
         ...(plan ? { p_plan_id: plan.id } : {}),
       });
       if (error) throw error;
+      if (allIds.length > 1) {
+        const r = await (supabase as any).rpc("set_appointment_extras", { p_appointment_id: id, p_service_ids: allIds.slice(1) });
+        if (r.error) throw r.error;
+      }
     },
     onSuccess: () => {
       toast.success("Booking saved");
@@ -93,11 +102,12 @@ export function BookForm(p: {
       <p className="text-sm text-muted-foreground">{fmtDate(p.date, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p>
 
       <span className={lbl}>Service</span>
+      <div className="flex gap-2">
       <Popover open={svcOpen} onOpenChange={setSvcOpen} modal>
         <PopoverTrigger asChild>
-          <Button type="button" variant="outline" role="combobox" className="w-full justify-between font-normal">
-            <span className={cn("truncate", !serviceId && "text-muted-foreground")}>
-              {p.services.find((x) => x.id === serviceId)?.name ?? "Select service…"}
+          <Button type="button" variant="outline" role="combobox" className="min-w-0 flex-1 justify-between font-normal">
+            <span className={cn("truncate", !cur && "text-muted-foreground")}>
+              {p.services.find((x) => x.id === cur)?.name ?? (chosen.length ? "Add another service…" : "Select service…")}
             </span>
             <ChevronsUpDown className="size-4 opacity-50" />
           </Button>
@@ -109,7 +119,7 @@ export function BookForm(p: {
               <CommandEmpty>No service found.</CommandEmpty>
               {p.services.map((s) => (
                 <CommandItem key={s.id} value={s.name} onSelect={() => { pickService(s.id); setSvcOpen(false); }}>
-                  <Check className={cn("mr-2 size-4", serviceId === s.id ? "opacity-100" : "opacity-0")} />
+                  <Check className={cn("mr-2 size-4", cur === s.id ? "opacity-100" : "opacity-0")} />
                   {s.name}
                 </CommandItem>
               ))}
@@ -117,6 +127,18 @@ export function BookForm(p: {
           </Command>
         </PopoverContent>
       </Popover>
+      <Button type="button" variant="outline" disabled={!cur} onClick={addCur}><Plus className="size-4" /> Add</Button>
+      </div>
+      {chosen.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {chosen.map((id) => (
+            <span key={id} className="inline-flex items-center gap-1 rounded-full bg-[#e3f1ed] px-3 py-1.5 text-sm text-[#2f7d6b]">
+              {p.services.find((x) => x.id === id)?.name}
+              <button type="button" onClick={() => removeSvc(id)}><X className="size-3.5" /></button>
+            </span>
+          ))}
+        </div>
+      )}
 
       {openPlans.length > 0 && (
         <>

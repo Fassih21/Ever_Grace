@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { BillingPanel } from "@/components/billing-panel";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { STATUS, useServices, useSlots, type Status } from "@/lib/shared";
+import { STATUS, useExtras, useServices, useSlots, useSvcLabel, type Status } from "@/lib/shared";
 import { fmtDate, fmtTime, money } from "@/lib/format";
 
 export const Route = createFileRoute("/_app/appointments/$id")({
@@ -20,6 +20,8 @@ function Detail() {
   const { id } = Route.useParams();
   const qc = useQueryClient();
   const services = useServices().data ?? [];
+  const label = useSvcLabel();
+  const extras = useExtras().data;
   const slots = useSlots().data ?? [];
   const [note, setNote] = useState<string | null>(null);
 
@@ -55,7 +57,7 @@ function Detail() {
 
   const s0 = slots.find((s) => s.sort_order === a.start_slot);
   const s1 = slots.find((s) => s.sort_order === a.start_slot! + a.slots_count! - 1) ?? s0;
-  const svc = services.find((s) => s.id === a.service_id)?.name ?? "—";
+  const svc = label(id, a.service_id) || "—";
   const row = (k: string, v: string) => (
     <div className="flex justify-between gap-4 border-b py-2.5 text-sm last:border-b-0">
       <span className="text-muted-foreground">{k}</span><span className="text-right font-medium">{v}</span>
@@ -80,7 +82,7 @@ function Detail() {
       </div>
       {(a.status !== "cancelled" && a.status !== "no_show") && (
         <BillingPanel key={`${a.total_amount}-${a.paid_total}`} id={id} total={a.total_amount!} discount={a.discount_amount ?? 0} paid={a.paid_total ?? 0}
-          defaultPrice={services.find((s) => s.id === a.service_id)?.default_price ?? 0} />
+          defaultPrice={[a.service_id, ...(extras?.get(id) ?? [])].reduce((t, sid) => t + (services.find((s) => s.id === sid)?.default_price ?? 0), 0)} />
       )}
 
       <div className="mb-2 text-sm font-semibold">Status</div>

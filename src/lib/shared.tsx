@@ -82,3 +82,19 @@ export async function pageAll<T>(mk: (from: number, to: number) => PromiseLike<{
     if (!data || data.length < 1000) return out;
   }
 }
+// extra services per appointment (first service stays in appointments.service_id)
+export function useExtras() {
+  return useQuery({
+    queryKey: ["appt-extras"],
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("appointments").select("id,extra_service_ids").neq("extra_service_ids", "{}");
+      return new Map<string, string[]>((data ?? []).map((r: { id: string; extra_service_ids: string[] }) => [r.id, r.extra_service_ids]));
+    },
+  });
+}
+export function useSvcLabel() {
+  const services = useServices().data ?? [];
+  const ex = useExtras().data;
+  return (apptId: string | null, sid: string | null) =>
+    [sid, ...((apptId && ex?.get(apptId)) || [])].map((i) => services.find((s) => s.id === i)?.name).filter(Boolean).join(" + ");
+}
