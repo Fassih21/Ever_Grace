@@ -36,6 +36,7 @@ function Form({ target }: { target: InvTarget }) {
   const [pct, setPct] = useState(false);
   const [received, setReceived] = useState("");
   const [method, setMethod] = useState<Method>("cash");
+  const [hideDisc, setHideDisc] = useState(true);
   const [apptId, setApptId] = useState<string | null>(null);
   const qc = useQueryClient();
   const appts = useQuery({
@@ -83,7 +84,7 @@ function Form({ target }: { target: InvTarget }) {
       const number = `EVG-${date.replaceAll("-", "")}-${Date.now().toString().slice(-4)}`;
       const blob = await buildInvoicePdf({
         number, date: fmtDate(date, { day: "numeric", month: "long", year: "numeric" }),
-        patient: { name: name.trim(), phone: phone.trim() }, extraDiscount: discount,
+        patient: { name: name.trim(), phone: phone.trim() }, extraDiscount: discount, hideDiscount: hideDisc,
         lines: lines.map((r) => {
           const q = num(r.qty) || 1, a = num(r.price) * q;
           return { service: q > 1 ? `${r.name.trim()} x ${q}` : r.name.trim(), when: fmtDate(date, { day: "numeric", month: "short" }), price: a, discount: 0, amount: a };
@@ -140,6 +141,7 @@ function Form({ target }: { target: InvTarget }) {
         <div className="flex justify-between"><span className="text-muted-foreground">Balance</span><span>{money(balance)}</span></div>
         <p className="pt-1 text-center text-xs font-semibold text-[#b4443a]">Payments can't be refunded in any case.</p>
       </div>
+      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={hideDisc} onChange={(e) => setHideDisc(e.target.checked)} />Hide discount on invoice</label>
       <div className="flex gap-2">
         <Button className="flex-1" disabled={busy} onClick={() => run(false)}>Download PDF</Button>
         <Button className="flex-1" variant="outline" disabled={busy} onClick={() => run(true)}>Print</Button>
