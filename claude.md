@@ -46,38 +46,51 @@ Read this first. Project = clinic management web app for **Evergrace Aesthetics 
 
 ## Database (public schema)
 Tables: `profiles`, `user_roles`, `services` (name, default_price, default_slots 1-3, active), `slots` (label, start/end time, sort_order, active), `patients` (name, phone unique `^03\d{9}$`), `treatment_plans`, `appointments` (patient, service, appt_date, start_slot, slots_count 1-3, total_amount, status, cancel_reason, plan_id), `payments` (append-only, voidable), `expenses`, `staff`, `attendance`, `salaries`.
-Enums: appointment_status (booked, completed, cancelled, no_show), payment_method (cash, card, bank_transfer), attendance_status, salary_status, treatment_plan_status, clinic_role.
+Enums: appointment_status (booked, completed, on_hold, cancelled, no_show; `on_hold` exists in live DB, `types.ts` may lag), payment_method (cash, card, bank_transfer), attendance_status, salary_status, treatment_plan_status, clinic_role.
 - No-overlap constraint: two active (booked/completed) appointments cannot share a slot on the same date.
 - View `appointment_balance` (security_invoker): appointment + `paid_total` + `balance` (+ `discount_amount` used by invoices). Use for all due/pending math.
-- RPCs: `book_appointment` (creates/links patient by phone + appointment in one step), `receive_appointment_payment`, `has_role`, `is_active_user`, `create_clinic_profile` (trigger on auth user create). Also used by code, defined in live DB (verify in Lovable if missing): `get_or_create_invoice`, `ping`.
+- `appointments` extra columns (added after scaffold): `discount_amount` int, `extra_service_ids uuid[]` (2nd+ services; first stays in `service_id`), `stage` text (registered, front_desk, received, conducted, approved; default registered).
+- **Price model:** booking creates the appointment with `total_amount = 0` = "price not set". `total_amount` is the NET payable (after discount); `discount_amount` stored separately. Pending (`balance`) only exists once price is set (balance 0 while unpriced). Price/discount/advance are set later via `set_appointment_billing`.
+- RPCs: `book_appointment` (11 named args incl. `p_discount_amount`, `p_total_amount` may be 0; the old overload with `p_discount_amount` last was dropped, two overloads cause "could not choose best candidate"), `set_appointment_billing(p_appointment_id,p_price,p_discount,p_advance,p_method)` (sets net total + discount, optional advance payment), `set_appointment_extras(p_appointment_id,p_service_ids)`, `set_appointment_stage(p_appointment_id,p_stage)`, `receive_appointment_payment`, `has_role`, `is_active_user`, `create_clinic_profile` (trigger on auth user create). Also used by code, defined in live DB (verify in Lovable if missing): `get_or_create_invoice`, `ping`.
 - Trigger `payment_append_only_guard`: payments cannot be edited/deleted, only voided.
 - Money is integer PKR. Timezone for "today" is Asia/Karachi (`todayPK()` in `src/lib/format.ts`).
 
 ## Pages (`src/routes/_app/`)
-- `dashboard.tsx` (owner): revenue/pending/appointment stats.
-- `appointments.tsx`: date on top (default today), hourly slots 10-11 to 3-4, click free slot -> `BookForm` (patient name+phone+service+duration), booked slot shows, cancel frees slot, mark completed.
-- `patients.index.tsx`: tabs Today / All, search by name or phone, "Add patient" (walk-in booking via `BookForm`), each row has **Make invoice** button (replaced the old service/paid/due/pending columns on client request, 19 Nov 2026). Click row -> patient detail.
-- `patients.$id.tsx`: full patient info, visit history, payments, receive payment, old per-visit `InvoiceDialog`.
-- `pending.tsx`: patients with outstanding balance.
-- `expenses.tsx`, `staff.tsx` (staff, attendance, salaries), `settings.tsx` (services, slots, users; owner only).
-- `login.tsx`, `index.tsx` (redirect).
+- `dashboard.tsx` (owner): revenue/pending/appointment stats (shows first service only).
+- `appointments.index.tsx` / `appointments.$id.tsx`: date on top (default today), hourly slots, click free slot -> `BookForm` (NO price fields; name, phone, one or more services, duration). Row shows "Price not set" until priced. Detail page has `BillingPanel` (price, Rs/% discount, receive now + method, live pending). Cancel frees slot, mark completed.
+- `patients.index.tsx`: tabs Today / All, search, **Add patient dropdown** = the 5 client stage options (Patient registration -> add form; Front Desk, Received sample, Conduct, Approve -> today's queue sheets via `StageQueue`, with waiting counts). Each row has Make invoice. Click row -> patient detail.
+- `patients.$id.tsx`: patient info, visits (service names "A + B", "Set price" button for unpriced visits), payments, receive payment, old `InvoiceDialog`.
+- `pending.tsx`: patients with outstanding balance (unchanged; unpriced appts have balance 0 so they drop out automatically).
+- `settings.tsx` (owner): hub list (Services, Slots, Users + shortcuts to Staff, Expenses); each opens its own section with back button; services have search.
+- `expenses.tsx`, `staff.tsx`, `login.tsx` (logo), `index.tsx`.
 
 ## Key components / libs
-- `components/book-form.tsx` — booking (RPC `book_appointment`), booking and patient record merged, no double entry.
-- `components/receive-payment.tsx` — payment via RPC.
-- `components/invoice-dialog.tsx` — old invoice from completed DB visits (number via `get_or_create_invoice`).
-- `components/make-invoice.tsx` — NEW free-form invoice dialog: prefilled name/phone, date, any number of procedures (name/price/qty, suggestions from `services`), discount (Rs or %), received + method, Download PDF, Print (opens PDF in new tab). Not saved to DB; number is local `EVG-YYYYMMDD-xxxx`.
-- `lib/invoice.ts` — `CLINIC` constants (name, address, phone, footer) + `buildInvoicePdf`. Supports `extraDiscount`. Every PDF auto-prints **"Payments can't be refunded in any case."** above the footer.
-- `lib/shared.tsx` (hooks `useSlots`, `useServices`, `useDayAppts`, `pageAll`, `chip`), `lib/format.ts` (`money`, dates, `initials`).
+- `components/book-form.tsx` — booking via `book_appointment` with total 0; service picker + **Add** button builds a chip list (first = primary `service_id`, rest saved via `set_appointment_extras`). Plan and default duration follow the primary service.
+- `components/billing-panel.tsx` — sets price/discount/advance via `set_appointment_billing` (default price = sum of service default prices).
+- `components/make-invoice.tsx` — invoice dialog (procedures, qty, discount Rs/%, received + method). Looks up patient appointments by phone; if one is linked, Download/Print first saves billing via `set_appointment_billing` (this is what drives Pending), then builds the PDF. "Not linked" = PDF only. "Hide discount on invoice" checkbox (default ON). Can open blank (name/phone empty).
+- `components/invoice-dialog.tsx` — invoice from DB visits (`get_or_create_invoice`), same hide-discount checkbox.
+- `components/stage-queue.tsx` — `STAGES`, `useStages()` (today's stage map), `StageQueue` sheet (action button advances, Done list with Undo).
+- `lib/invoice.ts` — `CLINIC` constants + `buildInvoicePdf`: logo top-left (`/logo.png`, falls back to text), centered "Invoice" title, Invoice No top-right, date under phone, DATE/TIME column first then SERVICE. `hideDiscount` removes price/discount/amount columns, Subtotal and Discount rows (only Total payable, Paid, Balance). Always prints "Payments can't be refunded in any case."
+- `lib/shared.tsx` — `useSlots`, `useServices`, `useDayAppts`, `useExtras`, `useSvcLabel` (labels "A + B"), `pageAll`, `chip`, `METHODS`; `lib/format.ts` (`money`, dates, `initials`, `normPhone`).
+- Branding in `public/`: `logo.png` (transparent full logo), `logo-mark.png` (sidebar monogram tile), `favicon.png`.
+- Extra-service queries use `(supabase as any)` because `types.ts` does not know the new columns/RPCs (stage, extras); `set_appointment_billing` is typed.
 
 ## History / what was done
 1. Client asked for a full clinic system on the Neo Khata base; Lovable scaffold + feature-by-feature build.
 2. Built: private auth + roles, appointments (slots), patients (merged with booking), payments (append-only), pending, expenses, staff/attendance/salaries, settings, dashboard, PDF invoices, mobile + desktop layouts.
 3. Scaffold downloaded from Lovable and pushed to GitHub; deployed on Cloudflare Workers, DB on Lovable Cloud, keep-alive GitHub Action added.
 4. 19 Nov 2026 client change: Patients page must not show service/paid/due/pending; instead a small **Make invoice** option opening a small invoice form (self-entered data, multiple procedures, discount, print/download, refund line auto-added). Patient click still opens full info. Done (Phase 1).
+5. Nov 2026 changes (client requests), each needs SQL in Lovable first:
+   - Booking without price; price/discount/advance added later in appointment detail or via Make invoice -> `migration.sql` (also drops old `book_appointment` overload, see above).
+   - Multiple services per booking -> `migration2.sql` (`extra_service_ids`, `set_appointment_extras`).
+   - Settings as a hub; logo in sidebar/login/favicon/invoice; invoice layout + hide-discount toggle (code only).
+   - Add patient dropdown with stage workflow (Patient registration, Front Desk, Received sample, Conduct, Approve) -> `migration3.sql` (`stage`, `set_appointment_stage`). Stage meaning was assumed (queue per stage, today only); confirm with client.
+   - Apply order: migration.sql -> migration2.sql -> migration3.sql, then copy code.
 
 ## Open / notes
-- Dashboard and Pending pages still use appointment-based pending data; confirm with client whether they stay.
+- Dashboard, Pending and `InvoiceDialog` show only the first service name of multi-service bookings.
+- Stage is not shown on the appointments list or patient pages yet, only inside the Add patient queues.
+- `types.ts` should be regenerated after the SQL changes; `on_hold` type errors in `tsc` are pre-existing.
+- Make-invoice PDFs are not stored (number is local `EVG-YYYYMMDD-xxxx`); add an `invoices` table only if the client wants history.
+- Billing: editing price later via `set_appointment_billing` is blocked if net < already paid.
 - Sidebar label "Patients" unchanged.
-- Make-invoice invoices are not stored; add an `invoices` table via Lovable only if the client wants history.
-- Code from the 19 Nov change was not run/typechecked in the sandbox (no node_modules); run `npm i && npm run build` locally.
