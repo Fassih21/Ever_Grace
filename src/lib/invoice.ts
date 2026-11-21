@@ -19,6 +19,15 @@ export type InvoiceData = {
 
 const rs = (n: number) => `Rs ${n.toLocaleString("en-US")}`;
 
+async function loadLogo(): Promise<{ data: string; w: number; h: number } | null> {
+  try {
+    const b = await (await fetch("/logo.png")).blob();
+    const data = await new Promise<string>((r, j) => { const f = new FileReader(); f.onload = () => r(f.result as string); f.onerror = j; f.readAsDataURL(b); });
+    const img = await new Promise<HTMLImageElement>((r, j) => { const i = new Image(); i.onload = () => r(i); i.onerror = j; i.src = data; });
+    return { data, w: img.width, h: img.height };
+  } catch { return null; }
+}
+
 export async function buildInvoicePdf(d: InvoiceData): Promise<Blob> {
   const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({ unit: "mm", format: "a4" });
@@ -27,14 +36,23 @@ export async function buildInvoicePdf(d: InvoiceData): Promise<Blob> {
   const color = (c: [number, number, number]) => doc.setTextColor(c[0], c[1], c[2]);
   let y = 22;
 
-  doc.setFont("times", "normal"); doc.setFontSize(26); color(INK); doc.text("Evergrace", M, y);
-  doc.setFont("helvetica", "normal"); doc.setFontSize(9); color(MUT);
-  doc.text(CLINIC.name, M, y + 6); doc.text(CLINIC.address, M, y + 11);
-  if (CLINIC.phone) doc.text(CLINIC.phone, M, y + 16);
+  const logo = await loadLogo();
+  if (logo) {
+    const lh = 30, lw = (lh * logo.w) / logo.h;
+    doc.addImage(logo.data, "PNG", M, 9, lw, lh);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9); color(MUT);
+    doc.text(CLINIC.address, M, 43);
+    if (CLINIC.phone) doc.text(CLINIC.phone, M, 48);
+  } else {
+    doc.setFont("times", "normal"); doc.setFontSize(26); color(INK); doc.text("Evergrace", M, y);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9); color(MUT);
+    doc.text(CLINIC.name, M, y + 6); doc.text(CLINIC.address, M, y + 11);
+    if (CLINIC.phone) doc.text(CLINIC.phone, M, y + 16);
+  }
   doc.setFont("helvetica", "normal"); doc.setFontSize(9.5); color(INK);
   doc.text(`Invoice No: ${d.number}`, R, y + 2, { align: "right" });
 
-  y += 22;
+  y += logo ? 33 : 22;
   doc.setFont("times", "normal"); doc.setFontSize(17); color(JADE);
   const tw = doc.getTextWidth("Invoice"), mid = W / 2;
   doc.setDrawColor(217, 224, 222); doc.line(M, y, mid - tw / 2 - 4, y); doc.line(mid + tw / 2 + 4, y, R, y);

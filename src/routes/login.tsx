@@ -38,8 +38,7 @@ function Login() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <form onSubmit={submit} className="w-full max-w-sm rounded-2xl border bg-card p-7 shadow-sm">
-        <div className="serif text-3xl">Evergrace</div>
-        <div className="mb-6 text-sm text-muted-foreground">Aesthetics Clinic</div>
+        <img src="/logo.png" alt="Ever Grace Aesthetics Clinic" className="mx-auto mb-6 w-44" />
         <div className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="email">Email</Label>
