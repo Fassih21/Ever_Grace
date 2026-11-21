@@ -25,6 +25,7 @@ function Inner({ target }: { target: InvoiceTarget }) {
   const { patientId, date } = target;
   const [off, setOff] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const [hideDisc, setHideDisc] = useState(true);
   const q = useQuery({
     queryKey: ["invoice-src", patientId, date],
     queryFn: async () => {
@@ -61,7 +62,7 @@ function Inner({ target }: { target: InvoiceTarget }) {
     const blob = await buildInvoicePdf({
       number,
       date: fmtDate(date, { day: "numeric", month: "long", year: "numeric" }),
-      patient: { name: d!.p?.name ?? "", phone: d!.p?.phone ?? "" },
+      patient: { name: d!.p?.name ?? "", phone: d!.p?.phone ?? "" }, hideDiscount: hideDisc,
       lines: rows.map((x) => ({
         service: d!.sv.find((s) => s.id === x.service_id)?.name ?? "Service",
         when: `${fmtDate(x.appt_date!, { day: "numeric", month: "short" })}, ${when(x.start_slot!, x.slots_count!)}`,
@@ -109,6 +110,7 @@ function Inner({ target }: { target: InvoiceTarget }) {
         <div className="flex justify-between"><span className="text-muted-foreground">Paid</span><span>{money(paid)}</span></div>
         <div className="flex justify-between"><span className="text-muted-foreground">Balance due</span><b className={total - paid > 0 ? "text-[#b4443a]" : "text-[#2f7d6b]"}>{money(Math.max(total - paid, 0))}</b></div>
       </div>
+      <label className="mb-2 flex items-center gap-2 text-sm"><input type="checkbox" checked={hideDisc} onChange={(e) => setHideDisc(e.target.checked)} />Hide discount on invoice</label>
       <div className="flex gap-2">
         <Button className="flex-1" disabled={!rows.length || busy} onClick={() => run(false)}>{busy ? "Creating…" : "Download PDF"}</Button>
         {canShare && <Button className="flex-1" variant="outline" disabled={!rows.length || busy} onClick={() => run(true)}>Share</Button>}

@@ -14,7 +14,7 @@ import {
 import { ReceivePayment, type PayTarget } from "@/components/receive-payment";
 import { InvoiceDialog, type InvoiceTarget } from "@/components/invoice-dialog";
 import { useMe } from "@/lib/auth";
-import { chip, useServices } from "@/lib/shared";
+import { chip, useServices, useSvcLabel } from "@/lib/shared";
 import { fmtDate, money } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -89,6 +89,7 @@ function Detail() {
   const live = q.data!.v.filter((a) => a.status === "booked" || a.status === "completed");
   const billed = live.reduce((t, a) => t + a.total_amount!, 0);
   const paid = live.reduce((t, a) => t + (a.paid_total ?? 0), 0);
+  const label = useSvcLabel();
   const svcName = (sid: string | null) => services.find((s) => s.id === sid)?.name ?? "Service";
   const usedBy = (planId: string) => live.filter((a) => a.plan_id === planId).length;
   const apptOf = (aid: string) => q.data!.v.find((a) => a.id === aid);
@@ -110,7 +111,7 @@ function Detail() {
         {q.data!.v.map((a) => (
           <div key={a.id!} className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b px-4 py-3.5 last:border-b-0">
             <div className="w-28 text-sm font-semibold">{fmtDate(a.appt_date!, { day: "numeric", month: "short", year: "numeric" })}</div>
-            <div className="min-w-0 flex-1 text-sm">{svcName(a.service_id)}{a.slots_count! > 1 ? ` · ${a.slots_count} slots` : ""}{a.plan_id ? " · plan" : ""}</div>
+            <div className="min-w-0 flex-1 text-sm">{label(a.id, a.service_id)}{a.slots_count! > 1 ? ` · ${a.slots_count} slots` : ""}{a.plan_id ? " · plan" : ""}</div>
             <span className={cn("rounded-full px-2.5 py-0.5 text-[11px] font-semibold capitalize", st[a.status!])}>{a.status!.replace("_", " ")}</span>
             <div className="w-28 text-right text-sm">{a.total_amount! > 0 ? <><b>{money(a.paid_total ?? 0)}</b><div className="text-xs text-muted-foreground">of {money(a.total_amount!)}</div></> : <div className="text-xs text-muted-foreground">Price not set</div>}{(a.discount_amount ?? 0) > 0 && <div className="text-xs text-[#2f7d6b]">Discount {money(a.discount_amount!)}</div>}</div>
             {a.status === "completed" && <Button size="sm" variant="outline" onClick={() => setInv({ patientId: id, date: a.appt_date! })}>Invoice</Button>}

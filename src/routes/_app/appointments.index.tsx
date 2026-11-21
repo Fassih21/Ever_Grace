@@ -17,7 +17,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { BookForm } from "@/components/book-form";
 import { InvoiceDialog, type InvoiceTarget } from "@/components/invoice-dialog";
-import { STATUS, type Status, calcMaxDur, useDayAppts, useServices, useSlots } from "@/lib/shared";
+import { STATUS, type Status, calcMaxDur, useDayAppts, useServices, useSlots, useSvcLabel } from "@/lib/shared";
 import { addDays, fmtDate, fmtTime, money, todayPK } from "@/lib/format";
 
 export const Route = createFileRoute("/_app/appointments/")({
@@ -40,7 +40,7 @@ function Appointments() {
   const past = date < today;
 
   const day = useDayAppts(date);
-  const svcName = (id: string | null) => services.find((s) => s.id === id)?.name ?? "";
+  const label = useSvcLabel();
   const rows = day.data ?? [];
   const startAt = (order: number) => rows.find((r) => r.start_slot === order);
   const occupied = (order: number) =>
@@ -128,7 +128,7 @@ function Appointments() {
                       <div className="min-w-0 flex-1 cursor-pointer" role="button" onClick={() => nav({ to: "/appointments/$id", params: { id: a.id! } })}>
                         <div className="truncate font-semibold">{a.patient}</div>
                         <div className="truncate text-sm text-muted-foreground">
-                          {svcName(a.service_id)}{a.slots_count! > 1 ? ` · ${a.slots_count} slots` : ""}
+                          {label(a.id, a.service_id)}{a.slots_count! > 1 ? ` · ${a.slots_count} slots` : ""}
                         </div>
                       </div>
                       <div className="text-right text-sm">
