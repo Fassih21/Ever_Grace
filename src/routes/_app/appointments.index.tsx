@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
@@ -17,7 +17,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { BookForm } from "@/components/book-form";
 import { InvoiceDialog, type InvoiceTarget } from "@/components/invoice-dialog";
-import { STATUS, type Status, calcMaxDur, useDayAppts, useServices, useSlots, useSvcLabel } from "@/lib/shared";
+import { STATUS, type Status, calcMaxDur, useDayAppts, useServices, useSlots, useSvcLabel, useCancelled } from "@/lib/shared";
 import { addDays, fmtDate, fmtTime, money, todayPK } from "@/lib/format";
 
 export const Route = createFileRoute("/_app/appointments/")({
@@ -41,6 +41,7 @@ function Appointments() {
 
   const day = useDayAppts(date);
   const label = useSvcLabel();
+  const canc = useCancelled(date).data ?? [];
   const rows = day.data ?? [];
   const startAt = (order: number) => rows.find((r) => r.start_slot === order);
   const occupied = (order: number) =>
@@ -111,16 +112,18 @@ function Appointments() {
           ) : (
             slots.map((s) => {
               const a = startAt(s.sort_order);
+              const cs = canc.filter((x) => x.start_slot === s.sort_order);
               if (!a && occupied(s.sort_order)) return null;
               const end = a ? slots.find((x) => x.sort_order === a.start_slot! + a.slots_count! - 1) ?? s : s;
               const time = `${fmtTime(s.start_time)} – ${fmtTime(end.end_time)}`;
               return (
-                <div key={s.id} className={cn("flex flex-wrap items-center gap-x-4 gap-y-2 border-b px-4 py-3.5 last:border-b-0", sel === s.sort_order && "bg-[#f3f8f6]")}>
+                <Fragment key={s.id}>
+                <div className={cn("flex flex-wrap items-center gap-x-4 gap-y-2 border-b px-4 py-3.5 last:border-b-0", sel === s.sort_order && "bg-[#f3f8f6]")}>
                   <div className="w-28 shrink-0">
                     <div className="text-sm font-semibold tabular-nums">{time}</div>
                     <span className={cn("mt-1 inline-block rounded-full px-2.5 py-0.5 text-[11px] font-semibold",
-                      !a ? "border border-dashed text-muted-foreground" : STATUS[a.status as Status].cls)}>
-                      {!a ? "Free" : STATUS[a.status as Status].label}
+                      a ? STATUS[a.status as Status].cls : "border border-dashed text-muted-foreground")}>
+                      {a ? STATUS[a.status as Status].label : "Free"}
                     </span>
                   </div>
                   {a ? (
@@ -150,11 +153,36 @@ function Appointments() {
                     </>
                   ) : (
                     <>
-                      <div className="flex-1 text-sm text-muted-foreground">{sel === s.sort_order ? "Selected for booking" : "Open slot"}</div>
+                      <div className="min-w-0 flex-1 text-sm text-muted-foreground">
+                        {sel === s.sort_order ? "Selected for booking" : "Open slot"}
+                      </div>
                       {!past && <Button size="sm" onClick={() => setSel(s.sort_order)}>Book</Button>}
                     </>
                   )}
                 </div>
+                {cs.map((c) => {
+                  const ce = slots.find((x) => x.sort_order === c.start_slot! + (c.slots_count ?? 1) - 1) ?? s;
+                  return (
+                    <div key={c.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b bg-[#fdf3f1] px-4 py-3.5 last:border-b-0">
+                      <div className="w-28 shrink-0">
+                        <div className="text-sm font-semibold tabular-nums">{fmtTime(s.start_time)} – {fmtTime(ce.end_time)}</div>
+                        <span className={cn("mt-1 inline-block rounded-full px-2.5 py-0.5 text-[11px] font-semibold", STATUS.cancelled.cls)}>Cancelled</span>
+                      </div>
+                      <div className="min-w-0 flex-1 cursor-pointer" role="button" onClick={() => nav({ to: "/appointments/$id", params: { id: c.id! } })}>
+                        <div className="truncate font-semibold text-[#b4443a]">{c.patient}</div>
+                        <div className="truncate text-sm text-[#b4443a]/70">{label(c.id, c.service_id)}</div>
+                      </div>
+                      {(c.total_amount ?? 0) > 0 && (
+                        <div className="text-right text-sm text-[#b4443a]">
+                          <div className="font-semibold">{money(c.total_amount!)}</div>
+                          {(c.discount_amount ?? 0) > 0 && <div className="text-xs opacity-70">Discount {money(c.discount_amount!)}</div>}
+                        </div>
+                      )}
+                      <span className="rounded-md border border-[#e9b8b0] px-3 py-1.5 text-sm font-medium text-[#b4443a]">Cancelled</span>
+                    </div>
+                  );
+                })}
+                </Fragment>
               );
             })
           )}
@@ -193,3 +221,4 @@ function Appointments() {
     </div>
   );
 }
+ 
