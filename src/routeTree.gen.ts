@@ -14,6 +14,7 @@ import { Route as AppRouteImport } from './routes/_app'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
 import { Route as AppExpensesRouteImport } from './routes/_app/expenses'
+import { Route as AppInvoicesRouteImport } from './routes/_app/invoices'
 import { Route as AppPendingRouteImport } from './routes/_app/pending'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as AppStaffRouteImport } from './routes/_app/staff'
@@ -44,6 +45,11 @@ const AppDashboardRoute = AppDashboardRouteImport.update({
 const AppExpensesRoute = AppExpensesRouteImport.update({
   id: '/expenses',
   path: '/expenses',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppInvoicesRoute = AppInvoicesRouteImport.update({
+  id: '/invoices',
+  path: '/invoices',
   getParentRoute: () => AppRoute,
 } as any)
 const AppPendingRoute = AppPendingRouteImport.update({
@@ -87,6 +93,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/dashboard': typeof AppDashboardRoute
   '/expenses': typeof AppExpensesRoute
+  '/invoices': typeof AppInvoicesRoute
   '/pending': typeof AppPendingRoute
   '/settings': typeof AppSettingsRoute
   '/staff': typeof AppStaffRoute
@@ -100,6 +107,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/dashboard': typeof AppDashboardRoute
   '/expenses': typeof AppExpensesRoute
+  '/invoices': typeof AppInvoicesRoute
   '/pending': typeof AppPendingRoute
   '/settings': typeof AppSettingsRoute
   '/staff': typeof AppStaffRoute
@@ -115,6 +123,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/expenses': typeof AppExpensesRoute
+  '/_app/invoices': typeof AppInvoicesRoute
   '/_app/pending': typeof AppPendingRoute
   '/_app/settings': typeof AppSettingsRoute
   '/_app/staff': typeof AppStaffRoute
@@ -130,6 +139,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/dashboard'
     | '/expenses'
+    | '/invoices'
     | '/pending'
     | '/settings'
     | '/staff'
@@ -143,6 +153,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/dashboard'
     | '/expenses'
+    | '/invoices'
     | '/pending'
     | '/settings'
     | '/staff'
@@ -157,6 +168,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/_app/dashboard'
     | '/_app/expenses'
+    | '/_app/invoices'
     | '/_app/pending'
     | '/_app/settings'
     | '/_app/staff'
@@ -207,6 +219,13 @@ declare module '@tanstack/react-router' {
       path: '/expenses'
       fullPath: '/expenses'
       preLoaderRoute: typeof AppExpensesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/invoices': {
+      id: '/_app/invoices'
+      path: '/invoices'
+      fullPath: '/invoices'
+      preLoaderRoute: typeof AppInvoicesRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/pending': {
@@ -264,6 +283,7 @@ declare module '@tanstack/react-router' {
 interface AppRouteChildren {
   AppDashboardRoute: typeof AppDashboardRoute
   AppExpensesRoute: typeof AppExpensesRoute
+  AppInvoicesRoute: typeof AppInvoicesRoute
   AppPendingRoute: typeof AppPendingRoute
   AppSettingsRoute: typeof AppSettingsRoute
   AppStaffRoute: typeof AppStaffRoute
@@ -276,6 +296,7 @@ interface AppRouteChildren {
 const AppRouteChildren: AppRouteChildren = {
   AppDashboardRoute: AppDashboardRoute,
   AppExpensesRoute: AppExpensesRoute,
+  AppInvoicesRoute: AppInvoicesRoute,
   AppPendingRoute: AppPendingRoute,
   AppSettingsRoute: AppSettingsRoute,
   AppStaffRoute: AppStaffRoute,

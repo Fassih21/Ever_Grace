@@ -1,9 +1,7 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, Plus, Search } from "lucide-react";
-import { StageQueue, STAGES, useStages, type StageKey } from "@/components/stage-queue";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Plus, Search } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,8 +35,6 @@ function Patients() {
   const [adding, setAdding] = useState(false);
   const [slot, setSlot] = useState<number | null>(null);
   const [inv, setInv] = useState<InvTarget | null>(null);
-  const [queue, setQueue] = useState<StageKey | null>(null);
-  const stages = useStages().data;
   const slots = useSlots().data ?? [];
   const services = useServices().data ?? [];
   const day = useDayAppts(today);
@@ -75,17 +71,7 @@ function Patients() {
           <h1 className="serif text-2xl md:text-3xl">Patients</h1>
           <p className="text-sm text-muted-foreground">{fmtDate(today, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p>
         </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild><Button><Plus /> Add patient <ChevronDown className="size-4" /></Button></DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            {STAGES.map((x) => (
-              <DropdownMenuItem key={x.k} onSelect={() => (x.k === "registered" ? setAdding(true) : setQueue(x.k))} className="justify-between">
-                {x.label}
-                {"from" in x && <span className="text-xs text-muted-foreground">{rows.filter((r) => (stages?.get(r.id!) ?? "registered") === x.from).length || ""}</span>}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <Button onClick={() => setAdding(true)}><Plus /> Add patient</Button>
       </div>
 
       <div className="mb-4 flex flex-wrap gap-3">
@@ -155,7 +141,6 @@ function Patients() {
           )}
         </SheetContent>
       </Sheet>
-      <StageQueue stage={queue} onClose={() => setQueue(null)} />
       <MakeInvoice target={inv} onClose={() => setInv(null)} />
     </div>
   );

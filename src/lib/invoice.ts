@@ -1,9 +1,4 @@
-export const CLINIC = {
-  name: "Evergrace Aesthetics Clinic",
-  address: "Township, Block 8, Sector B1, Lahore",
-  phone: "", // e.g. "0300 1234567" (leave empty to hide)
-  footer: "Thank you for choosing Evergrace.",
-};
+import { fetchSettings } from "./settings";
 
 export type InvoiceLine = { service: string; when: string; price: number; discount: number; amount: number };
 export type InvoicePayment = { date: string; method: string; amount: number };
@@ -36,18 +31,19 @@ export async function buildInvoicePdf(d: InvoiceData): Promise<Blob> {
   const color = (c: [number, number, number]) => doc.setTextColor(c[0], c[1], c[2]);
   let y = 22;
 
+  const cfg = await fetchSettings();
   const logo = await loadLogo();
   if (logo) {
     const lh = 30, lw = (lh * logo.w) / logo.h;
     doc.addImage(logo.data, "PNG", M, 9, lw, lh);
     doc.setFont("helvetica", "normal"); doc.setFontSize(9); color(MUT);
-    doc.text(CLINIC.address, M, 43);
-    if (CLINIC.phone) doc.text(CLINIC.phone, M, 48);
+    doc.text(cfg.clinic_address, M, 43);
+    if (cfg.clinic_phone) doc.text(cfg.clinic_phone, M, 48);
   } else {
     doc.setFont("times", "normal"); doc.setFontSize(26); color(INK); doc.text("Evergrace", M, y);
     doc.setFont("helvetica", "normal"); doc.setFontSize(9); color(MUT);
-    doc.text(CLINIC.name, M, y + 6); doc.text(CLINIC.address, M, y + 11);
-    if (CLINIC.phone) doc.text(CLINIC.phone, M, y + 16);
+    doc.text(cfg.clinic_name, M, y + 6); doc.text(cfg.clinic_address, M, y + 11);
+    if (cfg.clinic_phone) doc.text(cfg.clinic_phone, M, y + 16);
   }
   doc.setFont("helvetica", "normal"); doc.setFontSize(9.5); color(INK);
   doc.text(`Invoice No: ${d.number}`, R, y + 2, { align: "right" });
@@ -123,7 +119,7 @@ export async function buildInvoicePdf(d: InvoiceData): Promise<Blob> {
   doc.setFont("helvetica", "bold"); color(RED);
   doc.text("Payments can't be refunded in any case.", W / 2, 279, { align: "center" });
   doc.setFont("helvetica", "normal"); color(MUT);
-  doc.text(CLINIC.footer, W / 2, 285, { align: "center" });
+  doc.text(cfg.invoice_footer, W / 2, 285, { align: "center" });
   return doc.output("blob");
 }
 

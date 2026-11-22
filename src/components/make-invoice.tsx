@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { DEFAULTS, useAppSettings } from "@/lib/settings";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Plus, Trash2 } from "lucide-react";
@@ -36,7 +37,9 @@ function Form({ target }: { target: InvTarget }) {
   const [pct, setPct] = useState(false);
   const [received, setReceived] = useState("");
   const [method, setMethod] = useState<Method>("cash");
-  const [hideDisc, setHideDisc] = useState(true);
+  const cfg = useAppSettings().data ?? DEFAULTS;
+  const [hideO, setHideDisc] = useState<boolean | null>(null);
+  const hideDisc = hideO ?? cfg.invoice_hide_discount;
   const [apptId, setApptId] = useState<string | null>(null);
   const qc = useQueryClient();
   const appts = useQuery({
