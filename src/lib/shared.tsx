@@ -98,3 +98,15 @@ export function useSvcLabel() {
   return (apptId: string | null, sid: string | null) =>
     [sid, ...((apptId && ex?.get(apptId)) || [])].map((i) => services.find((s) => s.id === i)?.name).filter(Boolean).join(" + ");
 }
+
+export function useCancelled(date: string) {
+  return useQuery({
+    queryKey: ["appts", "cancelled", date],
+    queryFn: async () => {
+      const { data: rows } = await supabase.from("appointment_balance").select("id,patient_id,service_id,start_slot,slots_count,total_amount,discount_amount").eq("appt_date", date).eq("status", "cancelled").order("start_slot");
+      const ids = [...new Set((rows ?? []).map((r) => r.patient_id!))];
+      const { data: pts } = ids.length ? await supabase.from("patients").select("id,name").in("id", ids) : { data: [] };
+      return (rows ?? []).map((r) => ({ ...r, patient: (pts ?? []).find((p) => p.id === r.patient_id)?.name ?? "—" }));
+    },
+  });
+}

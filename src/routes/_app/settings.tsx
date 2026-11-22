@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Link } from "@tanstack/react-router";
-import { ChevronLeft, ChevronRight, Clock, FileText, SlidersHorizontal, Sparkles, UserCog, Users as UsersIcon, Wallet } from "lucide-react";
+import { ChevronLeft, ChevronRight, Clock, FileText, KeyRound, SlidersHorizontal, Sparkles, UserCog, Users as UsersIcon, Wallet } from "lucide-react";
 import { OwnerOnly } from "@/components/owner-only";
 import { createManager, setUserActive } from "@/lib/users.functions";
 import { fmtTime } from "@/lib/format";
@@ -27,6 +27,7 @@ const SECTIONS = [
   { k: "users", t: "Users", d: "Managers and access", i: UserCog },
   { k: "invoice", t: "Invoice", d: "Clinic name, address, footer, discount", i: FileText },
   { k: "display", t: "Display", d: "Pending page and menu items", i: SlidersHorizontal },
+  { k: "password", t: "Password", d: "Change your account password", i: KeyRound },
 ] as const;
 const LINKS = [
   { to: "/staff", t: "Staff", d: "Attendance and salaries", i: UsersIcon },
@@ -48,6 +49,7 @@ function Settings() {
         {view === "users" && <Users />}
         {view === "invoice" && <InvoiceSettings />}
         {view === "display" && <DisplaySettings />}
+        {view === "password" && <PasswordSettings />}
       </div>
     );
   }
@@ -231,6 +233,40 @@ function DisplaySettings() {
         <div key={to} className={box}><span className="flex-1 text-sm">Show {name} in menu</span>
           <Switch checked={!cfg.hidden_nav.includes(to)} onCheckedChange={(c) => done(save({ hidden_nav: c ? cfg.hidden_nav.filter((x) => x !== to) : [...cfg.hidden_nav, to] }))} /></div>
       ))}
+    </div>
+  );
+}
+
+function PasswordSettings() {
+  const [cur, setCur] = useState("");
+  const [pw, setPw] = useState("");
+  const [again, setAgain] = useState("");
+  const [busy, setBusy] = useState(false);
+  const bad = pw.length < 8 ? "New password must be at least 8 characters" : pw === cur ? "New password must differ from the current one" : again && again !== pw ? "Passwords do not match" : "";
+  async function change() {
+    setBusy(true);
+    try {
+      const { data: u } = await supabase.auth.getUser();
+      const email = u.user?.email;
+      if (!email) throw new Error("Not signed in");
+      const ok = await supabase.auth.signInWithPassword({ email, password: cur });
+      if (ok.error) throw new Error("Current password is wrong");
+      const { error } = await supabase.auth.updateUser({ password: pw });
+      if (error) throw error;
+      await supabase.auth.signOut({ scope: "others" });
+      setCur(""); setPw(""); setAgain("");
+      toast.success("Password changed");
+    } catch (e) { toast.error((e as Error).message); }
+    setBusy(false);
+  }
+  return (
+    <div className="mt-4 max-w-sm rounded-2xl border bg-card p-4">
+      <div className="mb-3"><div className={lbl}>Current password</div><Input type="password" autoComplete="current-password" value={cur} onChange={(e) => setCur(e.target.value)} /></div>
+      <div className="mb-3"><div className={lbl}>New password</div><Input type="password" autoComplete="new-password" value={pw} onChange={(e) => setPw(e.target.value)} /></div>
+      <div className="mb-3"><div className={lbl}>Confirm new password</div><Input type="password" autoComplete="new-password" value={again} onChange={(e) => setAgain(e.target.value)} /></div>
+      {(pw || again) && bad && <p className="mb-3 text-xs text-[#b4443a]">{bad}</p>}
+      <Button className="w-full" disabled={busy || !cur || !pw || !again || !!bad} onClick={change}>{busy ? "Changing…" : "Change password"}</Button>
+      <p className="mt-3 text-xs text-muted-foreground">Other devices are signed out after the change.</p>
     </div>
   );
 }
