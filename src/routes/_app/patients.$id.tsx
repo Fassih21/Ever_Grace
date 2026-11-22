@@ -1,163 +1,222 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, Plus, Search } from "lucide-react";
-import { StageQueue, STAGES, useStages, type StageKey } from "@/components/stage-queue";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft } from "lucide-react";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
-import { BookForm } from "@/components/book-form";
-import { MakeInvoice, type InvTarget } from "@/components/make-invoice";
-import { useIsMobile } from "@/hooks/use-mobile";
-import { ACTIVE, calcMaxDur, chip, pageAll, useDayAppts, useServices, useSlots } from "@/lib/shared";
-import { fmtDate, fmtTime, initials, todayPK } from "@/lib/format";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { ReceivePayment, type PayTarget } from "@/components/receive-payment";
+import { InvoiceDialog, type InvoiceTarget } from "@/components/invoice-dialog";
+import { useMe } from "@/lib/auth";
+import { chip, useServices, useSvcLabel } from "@/lib/shared";
+import { fmtDate, money } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-export const Route = createFileRoute("/_app/patients/")({
-  head: () => ({ meta: [{ title: "Patients · Evergrace Clinic" }] }),
-  component: Patients,
+export const Route = createFileRoute("/_app/patients/$id")({
+  head: () => ({ meta: [{ title: "Patient · Evergrace Clinic" }] }),
+  component: Detail,
 });
 
-const Avatar = ({ name }: { name: string }) => (
-  <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#e3f1ed] text-xs font-bold text-[#2f7d6b]">{initials(name)}</div>
-);
-const InvBtn = ({ onClick }: { onClick: (e: React.MouseEvent) => void }) => (
-  <Button size="sm" variant="outline" onClick={onClick}>Make invoice</Button>
-);
+const st: Record<string, string> = {
+  booked: "bg-[#fdf3dc] text-[#b7791f]", completed: "bg-[#e3f1ed] text-[#2f7d6b]",
+  cancelled: "bg-[#f7e1de] text-[#b4443a]", no_show: "bg-[#eef1f0] text-muted-foreground",
+  active: "bg-[#fdf3dc] text-[#b7791f]",
+};
+const lbl = "mb-1.5 block text-xs text-muted-foreground";
 
-function Patients() {
+function Detail() {
+  const { id } = Route.useParams();
   const qc = useQueryClient();
-  const isMobile = useIsMobile();
-  const today = todayPK();
-  const [tab, setTab] = useState<"today" | "all">("today");
-  const [q, setQ] = useState("");
-  const [adding, setAdding] = useState(false);
-  const [slot, setSlot] = useState<number | null>(null);
-  const [inv, setInv] = useState<InvTarget | null>(null);
-  const [queue, setQueue] = useState<StageKey | null>(null);
-  const stages = useStages().data;
-  const slots = useSlots().data ?? [];
+  const owner = useMe().data?.role === "owner";
+  const [pay, setPay] = useState<PayTarget | null>(null);
+  const [inv, setInv] = useState<InvoiceTarget | null>(null);
+  const [voidId, setVoidId] = useState<string | null>(null);
+  const [voidReason, setVoidReason] = useState("");
+  const [np, setNp] = useState({ service: "", sessions: "", price: "" });
   const services = useServices().data ?? [];
-  const day = useDayAppts(today);
-  const rows = day.data ?? [];
-  const term = q.trim().toLowerCase();
-  const isNum = /^[\d\s+-]+$/.test(term);
-  const hit = (name: string, phone: string) => !term || name.toLowerCase().includes(term) || (isNum && phone.includes(term.replace(/\D/g, "")));
 
-  const all = useQuery({
-    queryKey: ["patients-all"],
+  const q = useQuery({
+    queryKey: ["patient-detail", id],
     queryFn: async () => {
-      const pts = await pageAll((f, t) => supabase.from("patients").select("id,name,phone").order("name").range(f, t));
-      const ap = await pageAll((f, t) => supabase.from("appointment_balance").select("patient_id,balance").in("status", [...ACTIVE]).range(f, t));
-      const agg = new Map<string, { v: number; due: number }>();
-      ap.forEach((a) => {
-        const x = agg.get(a.patient_id!) ?? { v: 0, due: 0 };
-        x.v++; x.due += a.balance ?? 0;
-        agg.set(a.patient_id!, x);
-      });
-      return pts.map((p) => ({ ...p, visits: agg.get(p.id)?.v ?? 0, due: agg.get(p.id)?.due ?? 0 }));
+      const { data: p } = await supabase.from("patients").select("id,name,phone").eq("id", id).maybeSingle();
+      const { data: v } = await supabase.from("appointment_balance").select("*").eq("patient_id", id).order("appt_date", { ascending: false });
+      const { data: pays } = await supabase.from("payments").select("*").eq("patient_id", id).order("paid_at", { ascending: false });
+      const { data: plans } = await supabase.from("treatment_plans").select("*").eq("patient_id", id).order("created_at", { ascending: false });
+      return { p, v: v ?? [], pays: pays ?? [], plans: plans ?? [] };
     },
   });
 
-  const freeSlots = slots.filter((s) => !rows.some((r) => s.sort_order >= r.start_slot! && s.sort_order < r.start_slot! + r.slots_count!));
-  const chosen = slots.find((s) => s.sort_order === slot);
-  const close = () => { setAdding(false); setSlot(null); };
-  const todayRows = rows.filter((r) => hit(r.patient, r.phone)).sort((a, b) => a.start_slot! - b.start_slot!);
-  const allRows = (all.data ?? []).filter((p) => hit(p.name, p.phone));
+  const refresh = () => qc.invalidateQueries();
+
+  const voidPay = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("payments").update({ voided: true, void_reason: voidReason.trim() }).eq("id", voidId!);
+      if (error) throw error;
+    },
+    onSuccess: () => { toast.success("Payment voided"); setVoidId(null); setVoidReason(""); refresh(); },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const addPlan = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.from("treatment_plans").insert({
+        patient_id: id, service_id: np.service, total_sessions: Number(np.sessions), total_price: Number(np.price) || 0,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => { toast.success("Plan created"); setNp({ service: "", sessions: "", price: "" }); refresh(); },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const setPlanStatus = useMutation({
+    mutationFn: async (v: { id: string; status: "completed" | "cancelled" }) => {
+      const { error } = await supabase.from("treatment_plans").update({ status: v.status }).eq("id", v.id);
+      if (error) throw error;
+    },
+    onSuccess: () => { toast.success("Plan updated"); refresh(); },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  if (q.isLoading) return <Skeleton className="h-40" />;
+  const p = q.data?.p;
+  if (!p) return <p className="text-sm text-muted-foreground">Patient not found.</p>;
+  const live = q.data!.v.filter((a) => a.status === "booked" || a.status === "completed");
+  const billed = live.reduce((t, a) => t + a.total_amount!, 0);
+  const paid = live.reduce((t, a) => t + (a.paid_total ?? 0), 0);
+  const label = useSvcLabel();
+  const svcName = (sid: string | null) => services.find((s) => s.id === sid)?.name ?? "Service";
+  const usedBy = (planId: string) => live.filter((a) => a.plan_id === planId).length;
+  const apptOf = (aid: string) => q.data!.v.find((a) => a.id === aid);
+  const planOk = !!np.service && Number(np.sessions) > 0;
 
   return (
     <div>
-      <div className="mb-5 flex items-start justify-between gap-3">
-        <div>
-          <h1 className="serif text-2xl md:text-3xl">Patients</h1>
-          <p className="text-sm text-muted-foreground">{fmtDate(today, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p>
-        </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild><Button><Plus /> Add patient <ChevronDown className="size-4" /></Button></DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            {STAGES.map((x) => (
-              <DropdownMenuItem key={x.k} onSelect={() => (x.k === "registered" ? setInv({ name: "", phone: "" }) : setQueue(x.k))} className="justify-between">
-                {x.label}
-                {"from" in x && <span className="text-xs text-muted-foreground">{rows.filter((r) => (stages?.get(r.id!) ?? "registered") === x.from).length || ""}</span>}
-              </DropdownMenuItem>
-            ))}
-            <DropdownMenuItem onSelect={() => setAdding(true)}>Book walk-in appointment</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+      <Link to="/patients" className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Patients</Link>
+      <h1 className="serif text-2xl md:text-3xl">{p.name}</h1>
+      <p className="mb-5 text-sm text-muted-foreground">{p.phone} · {live.length} visit{live.length === 1 ? "" : "s"}</p>
+      <div className="mb-5 grid grid-cols-3 gap-3">
+        {[["Billed", money(billed), ""], ["Paid", money(paid), "text-[#2f7d6b]"], ["Pending", money(billed - paid), billed - paid ? "text-[#b4443a]" : ""]].map(([l, v, c]) => (
+          <div key={l} className="rounded-2xl border bg-card p-4"><div className="text-xs text-muted-foreground">{l}</div><div className={cn("serif mt-1 text-lg md:text-2xl", c)}>{v}</div></div>
+        ))}
       </div>
 
-      <div className="mb-4 flex flex-wrap gap-3">
-        <div className="flex rounded-xl bg-[#e5eae8] p-1">
-          {([["today", `Today · ${rows.length}`], ["all", `All${all.data ? ` · ${all.data.length}` : ""}`]] as const).map(([k, l]) => (
-            <button key={k} onClick={() => setTab(k)} className={cn("rounded-lg px-4 py-2 text-sm font-semibold", tab === k ? "bg-card shadow-sm" : "text-muted-foreground")}>{l}</button>
-          ))}
-        </div>
-        <div className="relative min-w-[220px] flex-1">
-          <Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" />
-          <Input className="bg-card pl-9" placeholder="Search name or phone" value={q} onChange={(e) => setQ(e.target.value)} />
-        </div>
+      <h2 className="mb-2 text-lg font-semibold">Visits</h2>
+      <div className="mb-6 overflow-hidden rounded-2xl border bg-card">
+        {q.data!.v.map((a) => (
+          <div key={a.id!} className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b px-4 py-3.5 last:border-b-0">
+            <div className="w-28 text-sm font-semibold">{fmtDate(a.appt_date!, { day: "numeric", month: "short", year: "numeric" })}</div>
+            <div className="min-w-0 flex-1 text-sm">{label(a.id, a.service_id)}{a.slots_count! > 1 ? ` · ${a.slots_count} slots` : ""}{a.plan_id ? " · plan" : ""}</div>
+            <span className={cn("rounded-full px-2.5 py-0.5 text-[11px] font-semibold capitalize", st[a.status!])}>{a.status!.replace("_", " ")}</span>
+            <div className="w-28 text-right text-sm">{a.total_amount! > 0 ? <><b>{money(a.paid_total ?? 0)}</b><div className="text-xs text-muted-foreground">of {money(a.total_amount!)}</div></> : <div className="text-xs text-muted-foreground">Price not set</div>}{(a.discount_amount ?? 0) > 0 && <div className="text-xs text-[#2f7d6b]">Discount {money(a.discount_amount!)}</div>}</div>
+            {a.status === "completed" && <Button size="sm" variant="outline" onClick={() => setInv({ patientId: id, date: a.appt_date! })}>Invoice</Button>}
+            {(a.status === "booked" || a.status === "completed") && a.total_amount === 0 ? (
+              <Button size="sm" variant="outline" asChild><Link to="/appointments/$id" params={{ id: a.id! }}>Set price</Link></Button>
+            ) : (a.status === "booked" || a.status === "completed") && (a.balance ?? 0) > 0 ? (
+              <Button size="sm" variant="outline" onClick={() => setPay({ id: a.id!, balance: a.balance!, who: p.name })}>Receive {money(a.balance!)}</Button>
+            ) : <div className="w-[110px]" />}
+          </div>
+        ))}
+        {!q.data!.v.length && <p className="p-8 text-center text-sm text-muted-foreground">No visits yet.</p>}
       </div>
 
-      <div className="overflow-hidden rounded-2xl border bg-card">
-        {tab === "today" ? (
-          day.isLoading ? <Skeleton className="m-4 h-40" /> : todayRows.length === 0 ? (
-            <p className="p-10 text-center text-sm text-muted-foreground">No patients booked today.</p>
-          ) : (
-            <>
-              {todayRows.map((r) => (
-                <Link key={r.id} to="/patients/$id" params={{ id: r.patient_id! }} className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b px-4 py-3.5 hover:bg-accent/40">
-                  <div className="w-28 text-sm font-semibold tabular-nums">
-                    {fmtTime(slots.find((s) => s.sort_order === r.start_slot)?.start_time ?? "0:00")} – {fmtTime(slots.find((s) => s.sort_order === r.start_slot! + r.slots_count! - 1)?.end_time ?? "0:00")}
-                  </div>
-                  <Avatar name={r.patient} />
-                  <div className="min-w-0 flex-1"><div className="truncate font-semibold">{r.patient}</div><div className="text-sm text-muted-foreground">{r.phone}</div></div>
-                  <InvBtn onClick={(e) => { e.preventDefault(); e.stopPropagation(); setInv({ name: r.patient, phone: r.phone }); }} />
-                </Link>
-              ))}
-
-            </>
-          )
-        ) : all.isLoading ? <Skeleton className="m-4 h-40" /> : allRows.length === 0 ? (
-          <p className="p-10 text-center text-sm text-muted-foreground">No patients found.</p>
-        ) : (
-          allRows.map((p) => (
-            <Link key={p.id} to="/patients/$id" params={{ id: p.id }} className="flex items-center gap-4 border-b px-4 py-3.5 last:border-b-0 hover:bg-accent/40">
-              <Avatar name={p.name} />
-              <div className="min-w-0 flex-1"><div className="truncate font-semibold">{p.name}</div><div className="text-sm text-muted-foreground">{p.phone}</div></div>
-              <div className="text-sm text-muted-foreground">{p.visits} visit{p.visits === 1 ? "" : "s"}</div>
-              <InvBtn onClick={(e) => { e.preventDefault(); e.stopPropagation(); setInv({ name: p.name, phone: p.phone }); }} />
-            </Link>
-          ))
-        )}
-      </div>
-
-      <Sheet open={adding} onOpenChange={(o) => !o && close()}>
-        <SheetContent side={isMobile ? "bottom" : "right"} className={cn("overflow-y-auto px-5 pb-8", isMobile ? "max-h-[92vh] rounded-t-3xl" : "w-[420px] sm:max-w-[420px]")}>
-          <SheetHeader className="sr-only"><SheetTitle>Add patient</SheetTitle></SheetHeader>
-          {!chosen ? (
-            <div className="pt-6">
-              <h2 className="text-xl font-semibold">Add patient</h2>
-              <p className="mb-4 text-sm text-muted-foreground">Today’s visit, one step. Choose a free slot.</p>
-              {freeSlots.length ? (
-                <div className="flex flex-wrap gap-2">
-                  {freeSlots.map((s) => <button key={s.id} className={chip(false)} onClick={() => setSlot(s.sort_order)}>{fmtTime(s.start_time)} – {fmtTime(s.end_time)}</button>)}
+      <h2 className="mb-2 text-lg font-semibold">Treatment plans</h2>
+      <div className="mb-6 overflow-hidden rounded-2xl border bg-card">
+        {q.data!.plans.map((pl) => {
+          const used = usedBy(pl.id);
+          return (
+            <div key={pl.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b px-4 py-3.5 text-sm">
+              <div className="min-w-0 flex-1">
+                <div className="font-semibold">{svcName(pl.service_id)}</div>
+                <div className="text-xs text-muted-foreground">{used} of {pl.total_sessions} sessions booked · {money(pl.total_price)} total</div>
+              </div>
+              <span className={cn("rounded-full px-2.5 py-0.5 text-[11px] font-semibold capitalize", st[pl.status] ?? st["cancelled"])}>{pl.status}</span>
+              {pl.status === "active" && (
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" onClick={() => setPlanStatus.mutate({ id: pl.id, status: "completed" })}>Complete</Button>
+                  <Button size="sm" variant="outline" className="border-[#e9b8b0] text-[#b4443a]" onClick={() => setPlanStatus.mutate({ id: pl.id, status: "cancelled" })}>Cancel plan</Button>
                 </div>
-              ) : <p className="text-sm text-muted-foreground">All slots are booked today.</p>}
+              )}
             </div>
-          ) : (
-            <div className="pt-6">
-              <BookForm walkIn key={slot} date={today} start={chosen.sort_order} label={`${fmtTime(chosen.start_time)} – ${fmtTime(chosen.end_time)}`}
-                maxDur={calcMaxDur(slots, rows, chosen.sort_order)} slots={slots} services={services}
-                onDone={() => { close(); qc.invalidateQueries(); }} />
+          );
+        })}
+        <div className="bg-[#f7f9f8] px-4 py-3">
+          <span className={lbl}>New plan</span>
+          <div className="mb-3 flex flex-wrap gap-2">
+            {services.map((s) => <button key={s.id} type="button" className={chip(np.service === s.id)} onClick={() => setNp({ ...np, service: s.id })}>{s.name}</button>)}
+          </div>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="w-28"><span className={lbl}>Sessions</span><Input inputMode="numeric" value={np.sessions} onChange={(e) => setNp({ ...np, sessions: e.target.value.replace(/\D/g, "") })} /></div>
+            <div className="w-36"><span className={lbl}>Total price (Rs)</span><Input inputMode="numeric" value={np.price} onChange={(e) => setNp({ ...np, price: e.target.value.replace(/\D/g, "") })} /></div>
+            <Button disabled={!planOk || addPlan.isPending} onClick={() => addPlan.mutate()}>Create plan</Button>
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">When booking this patient, choose the plan and the per-session amount fills in.</p>
+        </div>
+      </div>
+
+      <WalkinList id={id} />
+      <h2 className="mb-2 text-lg font-semibold">Payments</h2>
+      <div className="overflow-hidden rounded-2xl border bg-card">
+        {!q.data!.pays.length ? <p className="p-8 text-center text-sm text-muted-foreground">No payments yet.</p> : q.data!.pays.map((x) => {
+          const a = apptOf(x.appointment_id);
+          return (
+            <div key={x.id} className={cn("flex flex-wrap items-center gap-x-4 gap-y-2 border-b px-4 py-3 text-sm last:border-b-0", x.voided && "opacity-60")}>
+              <div className="w-28 font-medium">{fmtDate(x.paid_at.slice(0, 10), { day: "numeric", month: "short", year: "numeric" })}</div>
+              <div className="min-w-0 flex-1 text-muted-foreground">
+                {a ? svcName(a.service_id) : "Visit"} · <span className="capitalize">{x.method.replace("_", " ")}</span>
+                {x.voided && <div className="text-xs text-[#b4443a]">Voided: {x.void_reason}</div>}
+              </div>
+              <div className={cn("w-24 text-right font-semibold", x.voided && "line-through")}>{money(x.amount)}</div>
+              {owner && !x.voided ? (
+                <Button size="sm" variant="outline" className="border-[#e9b8b0] text-[#b4443a]" onClick={() => { setVoidReason(""); setVoidId(x.id); }}>Void</Button>
+              ) : <div className="w-[62px]" />}
             </div>
-          )}
-        </SheetContent>
-      </Sheet>
-      <StageQueue stage={queue} onClose={() => setQueue(null)} />
-      <MakeInvoice target={inv} onClose={() => setInv(null)} />
+          );
+        })}
+      </div>
+
+      <ReceivePayment target={pay} onClose={() => setPay(null)} />
+      <InvoiceDialog target={inv} onClose={() => setInv(null)} />
+
+      <AlertDialog open={!!voidId} onOpenChange={(o) => !o && setVoidId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Void this payment?</AlertDialogTitle>
+            <AlertDialogDescription>Use this for a refund or a wrong entry. The payment stays in history, but it no longer counts as collected, and on an active visit the amount becomes pending again.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <Input placeholder="Reason (required)" value={voidReason} onChange={(e) => setVoidReason(e.target.value)} />
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep payment</AlertDialogCancel>
+            <AlertDialogAction disabled={!voidReason.trim() || voidPay.isPending} onClick={(e) => { e.preventDefault(); voidPay.mutate(); }}>Void payment</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
+  );
+}
+function WalkinList({ id }: { id: string }) {
+  const w = useQuery({
+    queryKey: ["walkin", id],
+    queryFn: async () => ((await (supabase as any).from("walkin_invoices").select("id,inv_date,total,items").eq("patient_id", id).order("inv_date", { ascending: false })).data ?? []) as { id: string; inv_date: string; total: number; items: { name: string }[] }[],
+  });
+  if (!w.data?.length) return null;
+  return (
+    <>
+      <h2 className="mb-2 text-lg font-semibold">Walk-in invoices</h2>
+      <div className="mb-6 overflow-hidden rounded-2xl border bg-card">
+        {w.data.map((x) => (
+          <div key={x.id} className="flex items-center gap-3 border-b px-4 py-3 text-sm last:border-b-0">
+            <div className="w-20 text-muted-foreground">{fmtDate(x.inv_date, { day: "numeric", month: "short" })}</div>
+            <div className="min-w-0 flex-1 truncate">{x.items.map((i) => i.name).join(", ")}</div>
+            <b>{money(x.total)}</b>
+          </div>
+        ))}
+      </div>
+    </>
   );
 }

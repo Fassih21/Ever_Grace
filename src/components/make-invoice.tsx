@@ -32,6 +32,8 @@ function Form({ target }: { target: InvTarget }) {
   const [name, setName] = useState(target.name);
   const [phone, setPhone] = useState(target.phone);
   const [date, setDate] = useState(todayPK());
+  const [time, setTime] = useState(() => new Date().toLocaleTimeString("en-GB", { timeZone: "Asia/Karachi", hour: "2-digit", minute: "2-digit" }));
+  const t12 = time ? new Date(`2000-01-01T${time}`).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "";
   const [rows, setRows] = useState<Row[]>([blank()]);
   const [disc, setDisc] = useState("");
   const [pct, setPct] = useState(false);
@@ -57,6 +59,8 @@ function Form({ target }: { target: InvTarget }) {
   const sel = apptId ?? defId;
   const linked = list.find((a) => a.id === sel);
   const [busy, setBusy] = useState(false);
+  const [keep, setKeep] = useState(true);
+  const [saved, setSaved] = useState(false);
 
   const set = (i: number, k: keyof Row, v: string) =>
     setRows((r) => r.map((x, j) => {
@@ -84,13 +88,21 @@ function Form({ target }: { target: InvTarget }) {
         if (error) throw error;
         qc.invalidateQueries();
       }
+      if (!sel && keep && !saved) {
+        if (!/^03\d{9}$/.test(normPhone(phone))) throw new Error("Valid phone daalein, ya 'Don't save' chunein");
+        if (paid < total) throw new Error("Save karne ke liye poori payment (Received) likhein");
+        const { error } = await (supabase as any).rpc("save_walkin_invoice", { p_phone: phone, p_name: name.trim(), p_date: date, p_items: lines.map((r) => ({ name: r.name.trim(), qty: num(r.qty) || 1, price: num(r.price) })), p_total: total, p_discount: discount, p_paid: paid, p_method: method });
+        if (error) throw error;
+        setSaved(true);
+        qc.invalidateQueries();
+      }
       const number = `EVG-${date.replaceAll("-", "")}-${Date.now().toString().slice(-4)}`;
       const blob = await buildInvoicePdf({
-        number, date: fmtDate(date, { day: "numeric", month: "long", year: "numeric" }),
+        number, date: fmtDate(date, { day: "numeric", month: "long", year: "numeric" }) + (t12 ? `, ${t12}` : ""),
         patient: { name: name.trim(), phone: phone.trim() }, extraDiscount: discount, hideDiscount: hideDisc,
         lines: lines.map((r) => {
           const q = num(r.qty) || 1, a = num(r.price) * q;
-          return { service: q > 1 ? `${r.name.trim()} x ${q}` : r.name.trim(), when: fmtDate(date, { day: "numeric", month: "short" }), price: a, discount: 0, amount: a };
+          return { service: q > 1 ? `${r.name.trim()} x ${q}` : r.name.trim(), when: fmtDate(date, { day: "numeric", month: "short" }) + (t12 ? `, ${t12}` : ""), price: a, discount: 0, amount: a };
         }),
         payments: paid > 0 ? [{ date: fmtDate(date, { day: "numeric", month: "short", year: "numeric" }), method: METHODS.find((m) => m.v === method)!.l, amount: paid }] : [],
       });
@@ -102,11 +114,18 @@ function Form({ target }: { target: InvTarget }) {
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-2 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-2">
         <Input placeholder="Name *" value={name} onChange={(e) => setName(e.target.value)} />
         <Input placeholder="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
         <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
       </div>
+      {!sel && (
+        <select className="w-full rounded-md border bg-background px-2 py-2 text-sm" value={keep ? "save" : "no"} disabled={saved} onChange={(e) => setKeep(e.target.value === "save")}>
+          <option value="save">Save in patient list and dashboard (needs phone + full payment)</option>
+          <option value="no">Don't save (PDF only)</option>
+        </select>
+      )}
       {list.length > 0 && (
         <select className="w-full rounded-md border bg-background px-2 py-2 text-sm" value={sel} onChange={(e) => setApptId(e.target.value)}>
           <option value="">Not linked (PDF only, pending won't update)</option>
