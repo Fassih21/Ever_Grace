@@ -159,6 +159,7 @@ function Detail() {
         </div>
       </div>
 
+      <WalkinList id={id} />
       <h2 className="mb-2 text-lg font-semibold">Payments</h2>
       <div className="overflow-hidden rounded-2xl border bg-card">
         {!q.data!.pays.length ? <p className="p-8 text-center text-sm text-muted-foreground">No payments yet.</p> : q.data!.pays.map((x) => {
@@ -196,5 +197,26 @@ function Detail() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+function WalkinList({ id }: { id: string }) {
+  const w = useQuery({
+    queryKey: ["walkin", id],
+    queryFn: async () => ((await (supabase as any).from("walkin_invoices").select("id,inv_date,total,items").eq("patient_id", id).order("inv_date", { ascending: false })).data ?? []) as { id: string; inv_date: string; total: number; items: { name: string }[] }[],
+  });
+  if (!w.data?.length) return null;
+  return (
+    <>
+      <h2 className="mb-2 text-lg font-semibold">Walk-in invoices</h2>
+      <div className="mb-6 overflow-hidden rounded-2xl border bg-card">
+        {w.data.map((x) => (
+          <div key={x.id} className="flex items-center gap-3 border-b px-4 py-3 text-sm last:border-b-0">
+            <div className="w-20 text-muted-foreground">{fmtDate(x.inv_date, { day: "numeric", month: "short" })}</div>
+            <div className="min-w-0 flex-1 truncate">{x.items.map((i) => i.name).join(", ")}</div>
+            <b>{money(x.total)}</b>
+          </div>
+        ))}
+      </div>
+    </>
   );
 }

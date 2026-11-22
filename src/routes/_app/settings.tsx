@@ -7,10 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Link } from "@tanstack/react-router";
-import { ChevronLeft, ChevronRight, Clock, Sparkles, UserCog, Users as UsersIcon, Wallet } from "lucide-react";
+import { ChevronLeft, ChevronRight, Clock, FileText, SlidersHorizontal, Sparkles, UserCog, Users as UsersIcon, Wallet } from "lucide-react";
 import { OwnerOnly } from "@/components/owner-only";
 import { createManager, setUserActive } from "@/lib/users.functions";
 import { fmtTime } from "@/lib/format";
+import { DEFAULTS, useAppSettings, useSaveSettings } from "@/lib/settings";
 
 export const Route = createFileRoute("/_app/settings")({
   head: () => ({ meta: [{ title: "Settings · Evergrace Clinic" }] }),
@@ -24,6 +25,8 @@ const SECTIONS = [
   { k: "services", t: "Services", d: "Treatments, prices and default slots", i: Sparkles },
   { k: "slots", t: "Slots", d: "Clinic timings and breaks", i: Clock },
   { k: "users", t: "Users", d: "Managers and access", i: UserCog },
+  { k: "invoice", t: "Invoice", d: "Clinic name, address, footer, discount", i: FileText },
+  { k: "display", t: "Display", d: "Pending page and menu items", i: SlidersHorizontal },
 ] as const;
 const LINKS = [
   { to: "/staff", t: "Staff", d: "Attendance and salaries", i: UsersIcon },
@@ -43,6 +46,8 @@ function Settings() {
         {view === "services" && <Services />}
         {view === "slots" && <Slots />}
         {view === "users" && <Users />}
+        {view === "invoice" && <InvoiceSettings />}
+        {view === "display" && <DisplaySettings />}
       </div>
     );
   }
@@ -191,6 +196,41 @@ function Users() {
         <div className="min-w-[150px] flex-1"><div className={lbl}>Password (8+)</div><Input type="password" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} /></div>
         <Button className="self-end" disabled={!f.name.trim() || !f.email.includes("@") || f.password.length < 8 || add.isPending} onClick={() => add.mutate()}>Add manager</Button>
       </div>
+    </div>
+  );
+}
+
+function InvoiceSettings() {
+  const cfg = useAppSettings().data ?? DEFAULTS;
+  const save = useSaveSettings();
+  const [f, setF] = useState<Record<string, string> | null>(null);
+  const v = f ?? { clinic_name: cfg.clinic_name, clinic_address: cfg.clinic_address, clinic_phone: cfg.clinic_phone, invoice_footer: cfg.invoice_footer };
+  const field = (k: string, label: string) => (
+    <div className="mb-3"><div className={lbl}>{label}</div><Input value={v[k]} onChange={(e) => setF({ ...v, [k]: e.target.value })} /></div>
+  );
+  return (
+    <div className="mt-4 max-w-xl rounded-2xl border bg-card p-4">
+      {field("clinic_name", "Clinic name")}{field("clinic_address", "Address")}{field("clinic_phone", "Phone (leave empty to hide)")}{field("invoice_footer", "Footer message")}
+      <div className="mb-4 flex items-center justify-between"><span className="text-sm">Hide discount on invoice by default</span>
+        <Switch checked={cfg.invoice_hide_discount} onCheckedChange={(c) => save({ invoice_hide_discount: c }).then(() => toast.success("Saved"), (e: Error) => toast.error(e.message))} /></div>
+      <Button disabled={!f} onClick={() => save(v).then(() => { setF(null); toast.success("Saved"); }, (e: Error) => toast.error(e.message))}>Save</Button>
+    </div>
+  );
+}
+
+const MENU = [["/dashboard", "Dashboard"], ["/patients", "Patients"], ["/expenses", "Expenses"], ["/staff", "Staff"]] as const;
+function DisplaySettings() {
+  const cfg = useAppSettings().data ?? DEFAULTS;
+  const save = useSaveSettings();
+  const done = (p: Promise<void>) => p.then(() => toast.success("Saved"), (e: Error) => toast.error(e.message));
+  return (
+    <div className="mt-4 max-w-xl overflow-hidden rounded-2xl border bg-card">
+      <div className={box}><span className="flex-1 text-sm">Show patient names on Pending</span>
+        <Switch checked={cfg.pending_show_names} onCheckedChange={(c) => done(save({ pending_show_names: c }))} /></div>
+      {MENU.map(([to, name]) => (
+        <div key={to} className={box}><span className="flex-1 text-sm">Show {name} in menu</span>
+          <Switch checked={!cfg.hidden_nav.includes(to)} onCheckedChange={(c) => done(save({ hidden_nav: c ? cfg.hidden_nav.filter((x) => x !== to) : [...cfg.hidden_nav, to] }))} /></div>
+      ))}
     </div>
   );
 }

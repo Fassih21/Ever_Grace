@@ -1,9 +1,10 @@
 import { Link, Outlet, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, CircleDollarSign, LayoutGrid, LogOut, Receipt, Settings, UserCog, Users } from "lucide-react";
+import { CalendarDays, CircleDollarSign, LayoutGrid, FileText, LogOut, Receipt, Settings, UserCog, Users } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useMe } from "@/lib/auth";
+import { DEFAULTS, useAppSettings } from "@/lib/settings";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export const Route = createFileRoute("/_app")({ component: AppLayout });
@@ -11,6 +12,7 @@ export const Route = createFileRoute("/_app")({ component: AppLayout });
 const NAV = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutGrid, owner: true },
   { to: "/appointments", label: "Appointments", icon: CalendarDays },
+  { to: "/invoices", label: "Invoices", icon: FileText },
   { to: "/patients", label: "Patients", icon: Users },
   { to: "/pending", label: "Pending", icon: CircleDollarSign },
   { to: "/expenses", label: "Expenses", icon: Receipt },
@@ -20,6 +22,7 @@ const NAV = [
 
 function AppLayout() {
   const { data: me, isLoading } = useMe();
+  const hidden = (useAppSettings().data ?? DEFAULTS).hidden_nav;
   const nav = useNavigate();
   const qc = useQueryClient();
 
@@ -35,7 +38,7 @@ function AppLayout() {
     );
   }
 
-  const items = NAV.filter((n) => !("owner" in n && n.owner) || me.role === "owner");
+  const items = NAV.filter((n) => !("owner" in n && n.owner) || me.role === "owner").filter((n) => !hidden.includes(n.to));
   async function signOut() {
     await supabase.auth.signOut();
     qc.clear();

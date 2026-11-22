@@ -79,11 +79,12 @@ function Patients() {
           <DropdownMenuTrigger asChild><Button><Plus /> Add patient <ChevronDown className="size-4" /></Button></DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
             {STAGES.map((x) => (
-              <DropdownMenuItem key={x.k} onSelect={() => (x.k === "registered" ? setAdding(true) : setQueue(x.k))} className="justify-between">
+              <DropdownMenuItem key={x.k} onSelect={() => (x.k === "registered" ? setInv({ name: "", phone: "" }) : setQueue(x.k))} className="justify-between">
                 {x.label}
                 {"from" in x && <span className="text-xs text-muted-foreground">{rows.filter((r) => (stages?.get(r.id!) ?? "registered") === x.from).length || ""}</span>}
               </DropdownMenuItem>
             ))}
+            <DropdownMenuItem onSelect={() => setAdding(true)}>Book walk-in appointment</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

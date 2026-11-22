@@ -32,12 +32,13 @@ function Dashboard() {
   const d = useQuery({
     queryKey: ["dash", mode, sel, today],
     queryFn: async () => {
-      const [pay, exp, sal, open, appts] = await Promise.all([
+      const [pay, exp, sal, open, appts, walk] = await Promise.all([
         pageAll((f, t) => supabase.from("payments").select("amount,appointment_id").eq("voided", false).gte("paid_at", pk(start)).lt("paid_at", pk(addDays(end, 1))).range(f, t)),
         pageAll((f, t) => supabase.from("expenses").select("amount").gte("spent_on", start).lte("spent_on", end).range(f, t)),
         pageAll((f, t) => supabase.from("salaries").select("net").eq("status", "paid").gte("paid_on", start).lte("paid_on", end).range(f, t)),
         pageAll((f, t) => supabase.from("appointment_balance").select("patient_id,balance").gt("balance", 0).in("status", [...ACTIVE]).range(f, t)),
         pageAll((f, t) => supabase.from("appointments").select("id,service_id").order("id").range(f, t)),
+        pageAll((f, t) => (supabase as any).from("walkin_invoices").select("paid").gte("inv_date", start).lte("inv_date", end).range(f, t)) as Promise<{ paid: number }[]>,
       ]);
       const owing = new Set(open.map((a) => a.patient_id));
       const svcOf = new Map(appts.map((a) => [a.id, a.service_id]));
@@ -47,7 +48,7 @@ function Dashboard() {
         if (sid) bySvc.set(sid, (bySvc.get(sid) ?? 0) + x.amount);
       });
       const salaries = sal.reduce((t, x) => t + x.net, 0);
-      return { collected: sum(pay), expenses: sum(exp) + salaries, salaries, pending: open.reduce((t, a) => t + (a.balance ?? 0), 0), owing: owing.size, bySvc };
+      return { collected: sum(pay) + walk.reduce((t, x) => t + x.paid, 0), expenses: sum(exp) + salaries, salaries, pending: open.reduce((t, a) => t + (a.balance ?? 0), 0), owing: owing.size, bySvc };
     },
   });
 
@@ -60,14 +61,15 @@ function Dashboard() {
         return dt.toISOString().slice(0, 7);
       });
       const from = months[0] + "-01";
-      const [pay, exp, sal] = await Promise.all([
+      const [pay, exp, sal, walk] = await Promise.all([
         pageAll((f, t) => supabase.from("payments").select("amount,paid_at").eq("voided", false).gte("paid_at", pk(from)).range(f, t)),
         pageAll((f, t) => supabase.from("expenses").select("amount,spent_on").gte("spent_on", from).range(f, t)),
         pageAll((f, t) => supabase.from("salaries").select("net,paid_on").eq("status", "paid").gte("paid_on", from).range(f, t)),
+        pageAll((f, t) => (supabase as any).from("walkin_invoices").select("paid,inv_date").gte("inv_date", from).range(f, t)) as Promise<{ paid: number; inv_date: string }[]>,
       ]);
       return months.map((m) => ({
         m,
-        c: pay.filter((p) => new Date(new Date(p.paid_at).getTime() + 5 * 3600e3).toISOString().slice(0, 7) === m).reduce((t, p) => t + p.amount, 0),
+        c: pay.filter((p) => new Date(new Date(p.paid_at).getTime() + 5 * 3600e3).toISOString().slice(0, 7) === m).reduce((t, p) => t + p.amount, 0) + walk.filter((x) => x.inv_date.slice(0, 7) === m).reduce((t, x) => t + x.paid, 0),
         e: exp.filter((x) => x.spent_on.slice(0, 7) === m).reduce((t, x) => t + x.amount, 0)
           + sal.filter((x) => x.paid_on?.slice(0, 7) === m).reduce((t, x) => t + x.net, 0),
       }));

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { DEFAULTS, useAppSettings } from "@/lib/settings";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -25,7 +26,9 @@ function Inner({ target }: { target: InvoiceTarget }) {
   const { patientId, date } = target;
   const [off, setOff] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
-  const [hideDisc, setHideDisc] = useState(true);
+  const cfg = useAppSettings().data ?? DEFAULTS;
+  const [hideO, setHideDisc] = useState<boolean | null>(null);
+  const hideDisc = hideO ?? cfg.invoice_hide_discount;
   const q = useQuery({
     queryKey: ["invoice-src", patientId, date],
     queryFn: async () => {
