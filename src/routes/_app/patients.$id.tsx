@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PatientGenderSelect } from "@/components/patient-gender-select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -40,11 +41,12 @@ function Detail() {
   const [voidReason, setVoidReason] = useState("");
   const [np, setNp] = useState({ service: "", sessions: "", price: "" });
   const services = useServices().data ?? [];
+  const label = useSvcLabel();
 
   const q = useQuery({
     queryKey: ["patient-detail", id],
     queryFn: async () => {
-      const { data: p } = await supabase.from("patients").select("id,name,phone").eq("id", id).maybeSingle();
+      const { data: p } = await supabase.from("patients").select("id,name,phone,gender").eq("id", id).maybeSingle();
       const { data: v } = await supabase.from("appointment_balance").select("*").eq("patient_id", id).order("appt_date", { ascending: false });
       const { data: pays } = await supabase.from("payments").select("*").eq("patient_id", id).order("paid_at", { ascending: false });
       const { data: plans } = await supabase.from("treatment_plans").select("*").eq("patient_id", id).order("created_at", { ascending: false });
@@ -53,6 +55,15 @@ function Detail() {
   });
 
   const refresh = () => qc.invalidateQueries();
+
+  const saveGender = useMutation({
+    mutationFn: async (gender: string | null) => {
+      const { error } = await supabase.from("patients").update({ gender }).eq("id", id).select("id").single();
+      if (error) throw error;
+    },
+    onSuccess: refresh,
+    onError: (e: Error) => toast.error(e.message),
+  });
 
   const voidPay = useMutation({
     mutationFn: async () => {
@@ -89,7 +100,6 @@ function Detail() {
   const live = q.data!.v.filter((a) => a.status === "booked" || a.status === "completed");
   const billed = live.reduce((t, a) => t + a.total_amount!, 0);
   const paid = live.reduce((t, a) => t + (a.paid_total ?? 0), 0);
-  const label = useSvcLabel();
   const svcName = (sid: string | null) => services.find((s) => s.id === sid)?.name ?? "Service";
   const usedBy = (planId: string) => live.filter((a) => a.plan_id === planId).length;
   const apptOf = (aid: string) => q.data!.v.find((a) => a.id === aid);
@@ -99,7 +109,18 @@ function Detail() {
     <div>
       <Link to="/patients" className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> Patients</Link>
       <h1 className="serif text-2xl md:text-3xl">{p.name}</h1>
-      <p className="mb-5 text-sm text-muted-foreground">{p.phone} · {live.length} visit{live.length === 1 ? "" : "s"}</p>
+      <div className="mb-5 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-muted-foreground">
+        <span>{p.phone} · {live.length} visit{live.length === 1 ? "" : "s"}</span>
+        <label className="flex items-center gap-2">
+          Gender
+          <PatientGenderSelect
+            className="h-8 px-2 text-foreground"
+            value={(saveGender.isPending ? saveGender.variables : p.gender) ?? ""}
+            disabled={saveGender.isPending}
+            onChange={(e) => saveGender.mutate(e.target.value || null)}
+          />
+        </label>
+      </div>
       <div className="mb-5 grid grid-cols-3 gap-3">
         {[["Billed", money(billed), ""], ["Paid", money(paid), "text-[#2f7d6b]"], ["Pending", money(billed - paid), billed - paid ? "text-[#b4443a]" : ""]].map(([l, v, c]) => (
           <div key={l} className="rounded-2xl border bg-card p-4"><div className="text-xs text-muted-foreground">{l}</div><div className={cn("serif mt-1 text-lg md:text-2xl", c)}>{v}</div></div>

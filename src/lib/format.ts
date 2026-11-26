@@ -5,9 +5,11 @@ export const addDays = (d: string, n: number) => {
   t.setUTCDate(t.getUTCDate() + n);
   return t.toISOString().slice(0, 10);
 };
-export const fmtTime = (t: string) => {
+export const fmtTime = (t: string, withMeridiem = false) => {
   const [h, m] = t.split(":");
-  return `${Number(h) % 12 || 12}:${m}`;
+  const hour = Number(h);
+  const time = `${hour % 12 || 12}:${m}`;
+  return withMeridiem ? `${time} ${hour < 12 ? "AM" : "PM"}` : time;
 };
 export const normPhone = (v: string) => {
   let p = v.replace(/\D/g, "");

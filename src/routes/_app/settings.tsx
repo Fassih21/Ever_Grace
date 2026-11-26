@@ -212,7 +212,7 @@ function InvoiceSettings() {
   );
   return (
     <div className="mt-4 max-w-xl rounded-2xl border bg-card p-4">
-      {field("clinic_name", "Clinic name")}{field("clinic_address", "Address")}{field("clinic_phone", "Phone (leave empty to hide)")}{field("invoice_footer", "Footer message")}
+      {field("clinic_name", "Clinic name")}{field("clinic_address", "Address")}{field("clinic_phone", `Phone (defaults to ${DEFAULTS.clinic_phone})`)}{field("invoice_footer", "Footer message")}
       <div className="mb-4 flex items-center justify-between"><span className="text-sm">Hide discount on invoice by default</span>
         <Switch checked={cfg.invoice_hide_discount} onCheckedChange={(c) => save({ invoice_hide_discount: c }).then(() => toast.success("Saved"), (e: Error) => toast.error(e.message))} /></div>
       <Button disabled={!f} onClick={() => save(v).then(() => { setF(null); toast.success("Saved"); }, (e: Error) => toast.error(e.message))}>Save</Button>

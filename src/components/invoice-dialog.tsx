@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { DEFAULTS, useAppSettings } from "@/lib/settings";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -26,14 +25,11 @@ function Inner({ target }: { target: InvoiceTarget }) {
   const { patientId, date } = target;
   const [off, setOff] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
-  const cfg = useAppSettings().data ?? DEFAULTS;
-  const [hideO, setHideDisc] = useState<boolean | null>(null);
-  const hideDisc = hideO ?? cfg.invoice_hide_discount;
   const q = useQuery({
     queryKey: ["invoice-src", patientId, date],
     queryFn: async () => {
       const [p, a, sv, sl] = await Promise.all([
-        supabase.from("patients").select("name,phone").eq("id", patientId).maybeSingle(),
+        supabase.from("patients").select("name,phone,gender").eq("id", patientId).maybeSingle(),
         supabase.from("appointment_balance").select("*").eq("patient_id", patientId).eq("appt_date", date).eq("status", "completed").order("start_slot"),
         supabase.from("services").select("id,name"),
         supabase.from("slots").select("sort_order,start_time,end_time"),
@@ -62,10 +58,13 @@ function Inner({ target }: { target: InvoiceTarget }) {
     if (error) throw error;
     const number = `EVG-${date.slice(0, 4)}-${String(no).padStart(4, "0")}`;
     const ids = rows.map((x) => x.id!);
+    const first = d!.sl.find((x) => x.sort_order === rows[0]?.start_slot);
     const blob = await buildInvoicePdf({
       number,
       date: fmtDate(date, { day: "numeric", month: "long", year: "numeric" }),
-      patient: { name: d!.p?.name ?? "", phone: d!.p?.phone ?? "" }, hideDiscount: hideDisc,
+      time: first ? fmtTime(first.start_time, true) : "",
+      patient: { name: d!.p?.name ?? "", phone: d!.p?.phone ?? "", gender: d!.p?.gender ?? null },
+      hideDiscount: true,
       lines: rows.map((x) => ({
         service: d!.sv.find((s) => s.id === x.service_id)?.name ?? "Service",
         when: `${fmtDate(x.appt_date!, { day: "numeric", month: "short" })}, ${when(x.start_slot!, x.slots_count!)}`,
@@ -113,7 +112,6 @@ function Inner({ target }: { target: InvoiceTarget }) {
         <div className="flex justify-between"><span className="text-muted-foreground">Paid</span><span>{money(paid)}</span></div>
         <div className="flex justify-between"><span className="text-muted-foreground">Balance due</span><b className={total - paid > 0 ? "text-[#b4443a]" : "text-[#2f7d6b]"}>{money(Math.max(total - paid, 0))}</b></div>
       </div>
-      <label className="mb-2 flex items-center gap-2 text-sm"><input type="checkbox" checked={hideDisc} onChange={(e) => setHideDisc(e.target.checked)} />Hide discount on invoice</label>
       <div className="flex gap-2">
         <Button className="flex-1" disabled={!rows.length || busy} onClick={() => run(false)}>{busy ? "Creating…" : "Download PDF"}</Button>
         {canShare && <Button className="flex-1" variant="outline" disabled={!rows.length || busy} onClick={() => run(true)}>Share</Button>}
