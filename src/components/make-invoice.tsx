@@ -6,12 +6,13 @@ import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PatientGenderSelect } from "@/components/patient-gender-select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { METHODS, useServices, type Method } from "@/lib/shared";
 import { buildInvoicePdf, downloadBlob } from "@/lib/invoice";
-import { fmtDate, money, normPhone, todayPK } from "@/lib/format";
+import { fmtDate, fmtTime, money, normPhone, todayPK } from "@/lib/format";
 
-export type InvTarget = { name: string; phone: string };
+export type InvTarget = { name: string; phone: string; gender?: string | null };
 type Row = { name: string; price: string; qty: string };
 const blank = (): Row => ({ name: "", price: "", qty: "1" });
 const num = (v: string) => Math.max(Number(v) || 0, 0);
@@ -31,9 +32,11 @@ function Form({ target }: { target: InvTarget }) {
   const services = useServices().data ?? [];
   const [name, setName] = useState(target.name);
   const [phone, setPhone] = useState(target.phone);
+  const [genderChoice, setGenderChoice] = useState<string | null>(null);
+  const ph = normPhone(phone), targetPhone = normPhone(target.phone);
   const [date, setDate] = useState(todayPK());
   const [time, setTime] = useState(() => new Date().toLocaleTimeString("en-GB", { timeZone: "Asia/Karachi", hour: "2-digit", minute: "2-digit" }));
-  const t12 = time ? new Date(`2000-01-01T${time}`).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "";
+  const t12 = time ? fmtTime(time, true) : "";
   const [rows, setRows] = useState<Row[]>([blank()]);
   const [disc, setDisc] = useState("");
   const [pct, setPct] = useState(false);
@@ -45,16 +48,19 @@ function Form({ target }: { target: InvTarget }) {
   const [apptId, setApptId] = useState<string | null>(null);
   const qc = useQueryClient();
   const appts = useQuery({
-    queryKey: ["inv-appts", normPhone(target.phone)],
+    queryKey: ["inv-appts", targetPhone],
+    enabled: !!targetPhone,
     queryFn: async () => {
-      const { data: pt } = await supabase.from("patients").select("id").eq("phone", normPhone(target.phone)).maybeSingle();
-      if (!pt) return [];
+      const { data: pt } = await supabase.from("patients").select("id,gender").eq("phone", targetPhone).maybeSingle();
+      if (!pt) return null;
       const { data } = await supabase.from("appointment_balance").select("id,appt_date,service_id,total_amount,paid_total,status")
         .eq("patient_id", pt.id).in("status", ["booked", "completed", "on_hold"]).order("appt_date", { ascending: false });
-      return data ?? [];
+      return { gender: pt.gender, appointments: data ?? [] };
     },
   });
-  const list = appts.data ?? [];
+  const list = appts.data?.appointments ?? [];
+  const knownGender = appts.data === undefined ? target.gender : appts.data?.gender;
+  const gender = genderChoice ?? (ph === targetPhone ? knownGender : null) ?? "";
   const defId = (list.find((a) => a.appt_date === todayPK() && a.total_amount === 0) ?? list.find((a) => a.total_amount === 0))?.id ?? "";
   const sel = apptId ?? defId;
   const linked = list.find((a) => a.id === sel);
@@ -89,17 +95,21 @@ function Form({ target }: { target: InvTarget }) {
         qc.invalidateQueries();
       }
       if (!sel && keep && !saved) {
-        if (!/^03\d{9}$/.test(normPhone(phone))) throw new Error("Valid phone daalein, ya 'Don't save' chunein");
+        if (!/^03\d{9}$/.test(ph)) throw new Error("Valid phone daalein, ya 'Don't save' chunein");
         if (paid < total) throw new Error("Save karne ke liye poori payment (Received) likhein");
-        const { error } = await (supabase as any).rpc("save_walkin_invoice", { p_phone: phone, p_name: name.trim(), p_date: date, p_items: lines.map((r) => ({ name: r.name.trim(), qty: num(r.qty) || 1, price: num(r.price) })), p_total: total, p_discount: discount, p_paid: paid, p_method: method });
+        const { error } = await (supabase as any).rpc("save_walkin_invoice", { p_phone: ph, p_name: name.trim(), p_date: date, p_items: lines.map((r) => ({ name: r.name.trim(), qty: num(r.qty) || 1, price: num(r.price) })), p_total: total, p_discount: discount, p_paid: paid, p_method: method });
         if (error) throw error;
         setSaved(true);
+        if (gender) {
+          const { error } = await supabase.from("patients").update({ gender }).eq("phone", ph).select("id").single();
+          if (error) toast.error(`Invoice saved, but gender could not be updated: ${error.message}`);
+        }
         qc.invalidateQueries();
       }
       const number = `EVG-${date.replaceAll("-", "")}-${Date.now().toString().slice(-4)}`;
       const blob = await buildInvoicePdf({
-        number, date: fmtDate(date, { day: "numeric", month: "long", year: "numeric" }) + (t12 ? `, ${t12}` : ""),
-        patient: { name: name.trim(), phone: phone.trim() }, extraDiscount: discount, hideDiscount: hideDisc,
+        number, date: fmtDate(date, { day: "numeric", month: "long", year: "numeric" }), time: t12,
+        patient: { name: name.trim(), phone: phone.trim(), gender }, extraDiscount: discount, hideDiscount: hideDisc,
         lines: lines.map((r) => {
           const q = num(r.qty) || 1, a = num(r.price) * q;
           return { service: q > 1 ? `${r.name.trim()} x ${q}` : r.name.trim(), when: fmtDate(date, { day: "numeric", month: "short" }) + (t12 ? `, ${t12}` : ""), price: a, discount: 0, amount: a };
@@ -114,11 +124,15 @@ function Form({ target }: { target: InvTarget }) {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-2">
-        <Input placeholder="Name *" value={name} onChange={(e) => setName(e.target.value)} />
-        <Input placeholder="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
-        <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-        <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-6">
+        <Input className="sm:col-span-2" placeholder="Name *" value={name} onChange={(e) => setName(e.target.value)} />
+        <Input className="sm:col-span-2" placeholder="Phone" value={phone} onChange={(e) => {
+          if (normPhone(e.target.value) !== ph) setGenderChoice(null);
+          setPhone(e.target.value);
+        }} />
+        <PatientGenderSelect className="col-span-2 min-w-0" emptyLabel="Gender (optional)" value={gender} onChange={(e) => setGenderChoice(e.target.value)} />
+        <Input className="sm:col-span-3" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        <Input className="sm:col-span-3" type="time" value={time} onChange={(e) => setTime(e.target.value)} />
       </div>
       {!sel && (
         <select className="w-full rounded-md border bg-background px-2 py-2 text-sm" value={keep ? "save" : "no"} disabled={saved} onChange={(e) => setKeep(e.target.value === "save")}>
@@ -165,8 +179,8 @@ function Form({ target }: { target: InvTarget }) {
       </div>
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={hideDisc} onChange={(e) => setHideDisc(e.target.checked)} />Hide discount on invoice</label>
       <div className="flex gap-2">
-        <Button className="flex-1" disabled={busy} onClick={() => run(false)}>Download PDF</Button>
-        <Button className="flex-1" variant="outline" disabled={busy} onClick={() => run(true)}>Print</Button>
+        <Button className="flex-1" disabled={busy || appts.isLoading} onClick={() => run(false)}>Download PDF</Button>
+        <Button className="flex-1" variant="outline" disabled={busy || appts.isLoading} onClick={() => run(true)}>Print</Button>
       </div>
     </div>
   );

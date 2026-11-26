@@ -3,8 +3,9 @@ import { supabase } from "@/integrations/supabase/client";
 
 export const DEFAULTS = {
   clinic_name: "Evergrace Aesthetics Clinic",
-  clinic_address: "Township, Block 8, Sector B1, Lahore",
-  clinic_phone: "",
+  clinic_address: "Plot 89, Township Block 8, Sector B1, Lahore",
+  clinic_phone: "0326-8597427",
+  clinic_email: "evergraceaesthetics8@gmail.com",
   invoice_footer: "Thank you for choosing Evergrace.",
   invoice_hide_discount: true,
   pending_show_names: true,

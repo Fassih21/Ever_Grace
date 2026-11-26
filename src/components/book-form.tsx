@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PatientGenderSelect } from "@/components/patient-gender-select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
@@ -24,6 +25,7 @@ export function BookForm(p: {
   const serviceId = allIds[0] ?? "";
   const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
+  const [genderChoice, setGenderChoice] = useState<string | null>(null);
   const [dur, setDur] = useState(1);
   const [planId, setPlanId] = useState("");
   const [svcOpen, setSvcOpen] = useState(false);
@@ -34,16 +36,17 @@ export function BookForm(p: {
     queryKey: ["patient", ph],
     enabled: phoneOk,
     queryFn: async () => {
-      const { data: pt } = await supabase.from("patients").select("id,name").eq("phone", ph).maybeSingle();
+      const { data: pt } = await supabase.from("patients").select("id,name,gender").eq("phone", ph).maybeSingle();
       if (!pt) return null;
       const { data: v } = await supabase
         .from("appointment_balance").select("appt_date,service_id").eq("patient_id", pt.id)
         .in("status", [...ACTIVE]).order("appt_date", { ascending: false });
-      return { id: pt.id, name: pt.name, visits: v?.length ?? 0, last: v?.[0] ?? null };
+      return { ...pt, visits: v?.length ?? 0, last: v?.[0] ?? null };
     },
   });
   const ex = phoneOk ? existing.data : null;
   const shownName = ex ? ex.name : name;
+  const gender = genderChoice ?? ex?.gender ?? "";
 
   const plans = useQuery({
     queryKey: ["patient-plans", ex?.id],
@@ -71,7 +74,7 @@ export function BookForm(p: {
   };
   const addCur = () => { if (cur && !chosen.includes(cur)) setChosen([...chosen, cur]); setCur(""); };
   const removeSvc = (id: string) => { setChosen(chosen.filter((x) => x !== id)); setPlanId(""); };
-  const valid = !!serviceId && phoneOk && !!shownName.trim();
+  const valid = !!serviceId && phoneOk && !!shownName.trim() && !existing.isLoading;
 
   const save = useMutation({
     mutationFn: async () => {
@@ -81,6 +84,10 @@ export function BookForm(p: {
         ...(plan ? { p_plan_id: plan.id } : {}),
       });
       if (error) throw error;
+      if (gender && gender !== ex?.gender) {
+        const { error } = await supabase.from("patients").update({ gender }).eq("phone", ph).select("id").single();
+        if (error) toast.error(`Booking saved, but gender could not be updated: ${error.message}`);
+      }
       if (allIds.length > 1) {
         const r = await (supabase as any).rpc("set_appointment_extras", { p_appointment_id: id, p_service_ids: allIds.slice(1) });
         if (r.error) throw r.error;
@@ -160,7 +167,10 @@ export function BookForm(p: {
       </div>
 
       <span className={lbl}>Phone</span>
-      <Input inputMode="tel" placeholder="03xx xxxxxxx" value={phone} onChange={(e) => setPhone(e.target.value)} />
+      <Input inputMode="tel" placeholder="03xx xxxxxxx" value={phone} onChange={(e) => {
+        if (normPhone(e.target.value) !== ph) setGenderChoice(null);
+        setPhone(e.target.value);
+      }} />
       {phone && !phoneOk && <p className="mt-1 text-xs text-[#b4443a]">Enter a valid mobile number (03xx xxxxxxx)</p>}
       {ex && (
         <div className="mt-2 flex items-center gap-2 rounded-lg bg-[#e3f1ed] px-3 py-2 text-sm text-[#2f7d6b]">
@@ -171,6 +181,11 @@ export function BookForm(p: {
 
       <span className={lbl}>Patient name</span>
       <Input value={shownName} readOnly={!!ex} className={ex ? "bg-muted" : ""} onChange={(e) => setName(e.target.value)} />
+
+      <label className={lbl}>
+        Gender
+        <PatientGenderSelect className="mt-1.5 block w-full text-foreground" value={gender} onChange={(e) => setGenderChoice(e.target.value)} />
+      </label>
 
       <p className="mt-4 text-xs text-muted-foreground">Price baad mein appointment detail se add hogi.</p>
       <Button className="mt-4 w-full" disabled={!valid || save.isPending} onClick={() => save.mutate()}>
