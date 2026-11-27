@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ReceivePayment, type PayTarget } from "@/components/receive-payment";
-import { ACTIVE, fetchByIds, pageAll } from "@/lib/shared";
+import { fetchByIds, fetchPendingAppointments } from "@/lib/shared";
 import { DEFAULTS, useAppSettings } from "@/lib/settings";
 import { fmtDate, money } from "@/lib/format";
 
@@ -20,7 +20,7 @@ function Pending() {
   const q = useQuery({
     queryKey: ["pending"],
     queryFn: async () => {
-      const rows = await pageAll((f, t) => supabase.from("appointment_balance").select("id,patient_id,appt_date,balance").gt("balance", 0).in("status", [...ACTIVE]).order("appt_date").range(f, t));
+      const rows = await fetchPendingAppointments();
       const pts = await fetchByIds([...new Set(rows.map((r) => r.patient_id!))], (c) => supabase.from("patients").select("id,name").in("id", c));
       return rows.map((r) => ({ id: r.id!, date: r.appt_date!, due: r.balance!, name: pts.find((x) => x.id === r.patient_id)?.name ?? "—" }));
     },

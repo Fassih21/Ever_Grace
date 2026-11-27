@@ -82,6 +82,20 @@ export async function pageAll<T>(mk: (from: number, to: number) => PromiseLike<{
     if (!data || data.length < 1000) return out;
   }
 }
+
+export function fetchPendingAppointments() {
+  return pageAll((f, t) =>
+    supabase
+      .from("appointment_balance")
+      .select("id,patient_id,appt_date,balance,paid_total,status")
+      .gt("balance", 0)
+      .or("paid_total.gt.0,status.eq.completed")
+      .order("appt_date")
+      .order("id")
+      .range(f, t),
+  );
+}
+
 // extra services per appointment (first service stays in appointments.service_id)
 export function useExtras() {
   return useQuery({

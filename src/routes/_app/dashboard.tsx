@@ -1,11 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DayCalendar } from "@/components/day-calendar";
 import { OwnerOnly } from "@/components/owner-only";
-import { ACTIVE, pageAll, useDayAppts, useServices, useSlots } from "@/lib/shared";
+import {
+  fetchPendingAppointments,
+  pageAll,
+  useDayAppts,
+  useServices,
+  useSlots,
+} from "@/lib/shared";
 import { addDays, fmtDate, fmtTime, money, todayPK } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -19,11 +26,12 @@ const pk = (d: string) => `${d}T00:00:00+05:00`;
 
 function Dashboard() {
   const today = todayPK();
+  const monthStart = today.slice(0, 8) + "01";
   const [mode, setMode] = useState<"today" | "month">("today");
   const [sel, setSel] = useState(today);
   const isToday = sel === today;
   const dayLbl = isToday ? "today" : fmtDate(sel, { day: "numeric", month: "short" });
-  const start = mode === "today" ? sel : today.slice(0, 8) + "01";
+  const start = mode === "today" ? sel : monthStart;
   const end = mode === "today" ? sel : today;
   const services = useServices().data ?? [];
   const slots = useSlots().data ?? [];
@@ -36,7 +44,7 @@ function Dashboard() {
         pageAll((f, t) => supabase.from("payments").select("amount,appointment_id").eq("voided", false).gte("paid_at", pk(start)).lt("paid_at", pk(addDays(end, 1))).range(f, t)),
         pageAll((f, t) => supabase.from("expenses").select("amount").gte("spent_on", start).lte("spent_on", end).range(f, t)),
         pageAll((f, t) => supabase.from("salaries").select("net").eq("status", "paid").gte("paid_on", start).lte("paid_on", end).range(f, t)),
-        pageAll((f, t) => supabase.from("appointment_balance").select("patient_id,balance").gt("balance", 0).in("status", [...ACTIVE]).range(f, t)),
+        fetchPendingAppointments(),
         pageAll((f, t) => supabase.from("appointments").select("id,service_id").order("id").range(f, t)),
         pageAll((f, t) => (supabase as any).from("walkin_invoices").select("paid").gte("inv_date", start).lte("inv_date", end).range(f, t)) as Promise<{ paid: number }[]>,
       ]);
@@ -49,6 +57,36 @@ function Dashboard() {
       });
       const salaries = sal.reduce((t, x) => t + x.net, 0);
       return { collected: sum(pay) + walk.reduce((t, x) => t + x.paid, 0), expenses: sum(exp) + salaries, salaries, pending: open.reduce((t, a) => t + (a.balance ?? 0), 0), owing: owing.size, bySvc };
+    },
+  });
+
+  const sales = useQuery({
+    queryKey: ["dash", "sales", today],
+    queryFn: async () => {
+      const [appts, walk] = await Promise.all([
+        pageAll((f, t) =>
+          supabase
+            .from("appointments")
+            .select("total_amount")
+            .eq("status", "completed")
+            .gte("appt_date", monthStart)
+            .lte("appt_date", today)
+            .order("id")
+            .range(f, t),
+        ),
+        // The invoice form saves the payable total after applying the discount.
+        pageAll((f, t) =>
+          (supabase as SupabaseClient)
+            .from("walkin_invoices")
+            .select("total")
+            .gte("inv_date", monthStart)
+            .lte("inv_date", today)
+            .order("id")
+            .range(f, t)
+            .overrideTypes<{ total: number }[], { merge: false }>(),
+        ),
+      ]);
+      return appts.reduce((t, a) => t + a.total_amount, 0) + walk.reduce((t, w) => t + w.total, 0);
     },
   });
 
@@ -94,7 +132,12 @@ function Dashboard() {
 
   const v = d.data;
   const kpis = [
-    [mode === "today" ? `Collected ${dayLbl}` : "Collected this month", v ? money(v.collected) : "", "Payments received", "border-l-[#2f7d6b]"],
+    [
+      "Total Sales (this month)",
+      sales.data === undefined ? "" : money(sales.data),
+      `${fmtDate(today, { month: "long", year: "numeric" })} · as per invoices`,
+      "border-l-[#2f7d6b]",
+    ],
     ["Pending (all time)", v ? money(v.pending) : "", v ? `${v.owing} patient${v.owing === 1 ? "" : "s"} owe` : "", "border-l-[#b7791f]"],
     [mode === "today" ? `Expenses ${dayLbl}` : "Expenses this month", v ? money(v.expenses) : "", v ? `Incl. salaries paid ${money(v.salaries)}` : "", "border-l-[#e9b8b0]"],
     ["Net", v ? money(v.collected - v.expenses) : "", "Collected − expenses − salaries", "bg-[#14211f] text-white border-0"],
@@ -121,7 +164,11 @@ function Dashboard() {
         {kpis.map(([l, val, sub, c], i) => (
           <div key={l} className={cn("rounded-2xl border border-l-4 bg-card p-4", c)}>
             <div className={cn("text-xs", i === 3 ? "text-[#9ebdb5]" : "text-muted-foreground")}>{l}</div>
-            {d.isLoading ? <Skeleton className="mt-2 h-8 w-24" /> : <div className="serif mt-1 text-xl md:text-3xl">{val}</div>}
+            {(i === 0 ? sales.isLoading : d.isLoading) ? (
+              <Skeleton className="mt-2 h-8 w-24" />
+            ) : (
+              <div className="serif mt-1 text-xl md:text-3xl">{val}</div>
+            )}
             <div className={cn("mt-1 text-xs", i === 3 ? "text-[#9ebdb5]" : "text-muted-foreground")}>{sub}</div>
           </div>
         ))}
